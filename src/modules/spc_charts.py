@@ -1,6 +1,27 @@
+from pathlib import Path
+
 import plotly.graph_objects as go
 import pandas as pd
 import numpy as np
+
+def load_spec_limits(csv_path: str, product: str, parameter: str) -> tuple[float | None, float | None]:
+    """Loads spec limits (USL, LSL) from a CSV file."""
+    p = Path(csv_path)
+    if not p.exists():
+        return None, None
+    
+    spec_df = pd.read_csv(p)
+    spec_row = spec_df[
+        (spec_df["product"] == product) & (spec_df["parameter"] == parameter)
+    ]
+
+    if spec_row.empty:
+        return None, None
+
+    usl = spec_row["USL"].iloc[0] if "USL" in spec_row and pd.notna(spec_row["USL"].iloc[0]) else None
+    lsl = spec_row["LSL"].iloc[0] if "LSL" in spec_row and pd.notna(spec_row["LSL"].iloc[0]) else None
+
+    return usl, lsl
 
 def create_xbar_r_chart(df: pd.DataFrame, feature: str, subgroup_size: int = 5):
     if df.empty or feature not in df.columns:

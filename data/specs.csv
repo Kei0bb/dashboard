@@ -1,7 +1,7 @@
-product_name,parameter,USL,LSL
+product,parameter,USL,LSL
 ProductA,param1,1.5,0.9
-ProductA,param2,6.0,5.0
-ProductB,param1,1.4,0.8
-ProductB,param2,5.8,4.8
-ProductC,param1,1.6,1.0
-ProductC,param2,6.2,5.2
+ProductA,param2,15,9
+ProductB,param1,1.0,0.6
+ProductB,param2,10,6
+ProductC,param1,1.2,0.8
+ProductC,param2,12,8

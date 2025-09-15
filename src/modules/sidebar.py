@@ -5,19 +5,22 @@ import streamlit as st
 
 
 @st.cache_data
-def load_prod(csv_path: str) -> list[str]:
+def load_prod() -> list[str]:
+    csv_path = "data/products.csv"
     p = Path(csv_path)
     if not p.exists():
         return []
     df = pd.read_csv(p, encoding="utf-8")
-    col = "product" if "Product" in df.columns else df.columns[0]
+    df.columns = [c.lower() for c in df.columns]
+    col = "product" if "product" in df.columns else df.columns[0]
     return df[col].dropna().map(str.strip).unique().tolist()
 
 
-def render_sidebar(csv_path: str, *, key_prefix: str = "var") -> str:
-    prod = load_prod(csv_path)
+def product_selector(*, key_prefix: str = "var") -> str:
+    st.title("Product Selection")
+    prod = load_prod()
     if not prod:
-        st.sidebar.error(f"No varieties found in {csv_path}")
+        st.sidebar.error("No varieties found in data/products.csv")
         return ""
 
     with st.sidebar:
