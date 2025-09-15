@@ -4,16 +4,35 @@ import plotly.graph_objects as go
 import pandas as pd
 import numpy as np
 
-def load_spec_limits(csv_path: str, product: str, parameter: str) -> tuple[float | None, float | None]:
+def create_wafer_map(df: pd.DataFrame, parameter: str) -> go.Figure:
+    """Creates a wafer map for the given parameter."""
+    if df.empty or parameter not in df.columns or "DieX" not in df.columns or "DieY" not in df.columns:
+        return go.Figure()
+
+    fig = go.Figure(go.Heatmap(
+        x=df['DieX'],
+        y=df['DieY'],
+        z=df[parameter],
+        colorscale='Viridis',
+        showscale=True,
+    ))
+
+    fig.update_layout(
+        title=f"Wafer Map: {parameter}",
+        xaxis_title="Die X",
+        yaxis_title="Die Y",
+        yaxis_scaleanchor="x",
+    )
+    return fig
+
+def load_spec_limits(csv_path: str, parameter: str) -> tuple[float | None, float | None]:
     """Loads spec limits (USL, LSL) from a CSV file."""
     p = Path(csv_path)
     if not p.exists():
         return None, None
     
     spec_df = pd.read_csv(p)
-    spec_row = spec_df[
-        (spec_df["product"] == product) & (spec_df["parameter"] == parameter)
-    ]
+    spec_row = spec_df[spec_df["parameter"] == parameter]
 
     if spec_row.empty:
         return None, None
@@ -90,7 +109,8 @@ def create_individual_chart(df: pd.DataFrame, feature: str, usl: float = None, l
 
     # Iチャートの作成
     fig_i = go.Figure()
-    fig_i.add_trace(go.Scatter(x=df['lot_id'] + '-' + df['subgroup'].astype(str), y=individual_values, mode='lines+markers', name='Individual Value'))
+    # x軸を時系列にするため、インデックスを使用
+    fig_i.add_trace(go.Scatter(x=df.index, y=individual_values, mode='lines+markers', name='Individual Value'))
     fig_i.add_hline(y=cl, line_dash="dash", annotation_text="CL")
     fig_i.add_hline(y=ucl, line_dash="dot", annotation_text="UCL")
     fig_i.add_hline(y=lcl, line_dash="dot", annotation_text="LCL")
@@ -101,6 +121,6 @@ def create_individual_chart(df: pd.DataFrame, feature: str, usl: float = None, l
     if lsl is not None:
         fig_i.add_hline(y=lsl, line_dash="solid", line_color="red", annotation_text="LSL")
 
-    fig_i.update_layout(title=f'{feature} Individual Chart', xaxis_title="Lot ID - Subgroup", yaxis_title="Individual Value")
+    fig_i.update_layout(title=f'{feature} Individual Chart', xaxis_title="Measurement Point", yaxis_title="Value")
 
     return fig_i

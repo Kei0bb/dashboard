@@ -1,0 +1,6 @@
+parameter,USL,LSL
+1_VDFO,1.5,0
+2_CHN1_BS,30,10
+Con_M0LA,1.9,1.7
+Con_M0LB,2.0,1.8
+Con_M1A,1.1,0.9
