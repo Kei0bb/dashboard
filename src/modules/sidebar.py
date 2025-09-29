@@ -14,7 +14,6 @@ def load_prod() -> list[str]:
 
 
 def product_selector(*, key_prefix: str = "var") -> str:
-    st.sidebar.title("Product Selection")
     prod = load_prod()
     if not prod:
         st.sidebar.error("No product data found in `data` directory.")
