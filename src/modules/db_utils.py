@@ -39,30 +39,48 @@ def get_db_connection() -> Engine | None:
         return None
 
 
-def load_data_from_db(engine: Engine, product_id: str) -> dict[str, pd.DataFrame]:
-    """Loads sort, wat, and specs data for a given product from the database.
+import oracledb
+import pandas as pd
+import streamlit as st
 
-    Args:
-        engine: The SQLAlchemy Engine to use for the connection.
-        product_id: The identifier for the product to load.
+from . import sql_queries
 
-    Returns:
-        A dictionary containing 'sort', 'wat', and 'specs' pandas DataFrames.
-        Returns an empty dictionary if any table fails to load.
-    """
-    data = {}
-    tables = ["sort", "wat", "specs"]
+
+@st.cache_resource
+def get_db_connection():
+    """StreamlitのSecretsを使用してOracleデータベースへの接続を確立する"""
     try:
-        with engine.connect() as connection:
-            for table in tables:
-                # Assuming a 'product_id' column exists in each table
-                query = f"SELECT * FROM {table} WHERE product_id = :product_id"
-                df = pd.read_sql(query, connection, params={"product_id": product_id})
-                df.columns = df.columns.str.strip()
-                data[table] = df
-        return data
+        return oracledb.connect(
+            user=st.secrets["database"]["username"],
+            password=st.secrets["database"]["password"],
+            dsn=st.secrets["database"]["dsn"],
+        )
+    except oracledb.DatabaseError as e:
+        st.error(f"データベース接続エラー: {e}")
+        return None
     except Exception as e:
-        st.error(f"Error loading data from database for product '{product_id}': {e}")
+        st.error(f"予期せぬエラーが発生しました: {e}")
+        return None
+
+
+@st.cache_data
+def load_data_from_db(_conn, product_name: str) -> dict:
+    """指定された製品のデータをデータベースから読み込む"""
+    if not _conn:
+        st.error("データベース接続がありません。")
+        return {}
+
+    try:
+        # パラメータを指定してSQLを実行
+        params = {"product_name": product_name}
+        df_sort = pd.read_sql_query(sql_queries.YIELD_QUERY, _conn, params=params)
+        df_wat = pd.read_sql_query(sql_queries.WAT_QUERY, _conn, params=params)
+        df_specs = pd.read_sql_query(sql_queries.SPECS_QUERY, _conn, params=params)
+
+        return {"sort": df_sort, "wat": df_wat, "specs": df_specs}
+
+    except Exception as e:
+        st.error(f"データベースからのデータ読み込み中にエラーが発生しました: {e}")
         return {}
 
 
