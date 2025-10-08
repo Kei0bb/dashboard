@@ -3,6 +3,7 @@
 文字列定数として格納されています。
 """
 
+# --- 標準的な歩留まりクエリ (CP) ---
 YIELD_QUERY = """
 -- 製品名を指定して歩留まりデータを取得します。
 -- YOUR_YIELD_TABLE を実際のテーブル名に、各列名も実際の列名に合わせてください。
@@ -22,6 +23,35 @@ WHERE
     PRODUCT_NAME = :product_name
 """
 
+# --- Fail-Stop用の歩留まりクエリ (CPY) ---
+CPY_YIELD_QUERY = """
+-- Fail-Stop試験の製品向けに歩留まりデータを取得します。
+-- CPYデータは通常、PASSしたダイの情報のみを持つため、
+-- ここでは単純に1行を1PASSとしてカウントする例を示します。
+-- YOUR_CPY_TABLE を実際のテーブル名に、各列名も実際の列名に合わせてください。
+SELECT
+    PRODUCT_NAME AS "Product",
+    LOT_ID AS "LotID",
+    WAFER_ID AS "WaferID",
+    TEST_TIMESTAMP AS "Time",
+    1 AS "0_PASS", -- 1行 = 1 PASSダイ
+    0 AS "FAIL_BIN_2" -- Fail-Stopなので不良BINは存在しない想定
+FROM
+    YOUR_CPY_TABLE
+WHERE
+    PRODUCT_NAME = :product_name
+"""
+
+
+# --- 製品名と歩留まりクエリのマッピング ---
+# ここで指定されていない製品は、自動的にデフォルトのYIELD_QUERYが使用されます。
+YIELD_QUERY_MAP = {
+    # 'PRODUCT_FAIL_STOP': CPY_YIELD_QUERY, # CPYを使用する製品をここに登録
+    'DEFAULT': YIELD_QUERY,
+}
+
+
+# --- WAT/SPECS クエリ (変更なし) ---
 WAT_QUERY = """
 -- 製品名を指定してWATデータを取得します。
 -- YOUR_WAT_TABLE を実際のテーブル名に、各列名も実際の列名に合わせてください。

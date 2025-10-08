@@ -89,22 +89,35 @@ dsn = "your_oracle_host:1521/your_service_name"
 
 ### 8.3. データベース連携 SQLガイド
 
-本番用のデータベースと連携する際には、ダッシュボードが必要とするデータ構造に合わせてSQLクエリを準備する必要があります。以下に、**`src/modules/sql_queries.py`** に定義されているSQLクエリのテンプレートを示します。これらのクエリ内のテーブル名や列名を、実際の環境に合わせて修正してください。
+本番用のデータベースと連携する際には、ダッシュボードが必要とするデータ構造に合わせてSQLクエリを準備する必要があります。SQLクエリはすべて **`src/modules/sql_queries.py`** で一元管理されています。
 
 #### A. 歩留まりデータ (Yield / Sort)
 
--   **目的**: 歩留まりの集計、不良モードの分析
--   **必要な列**: 製品名, ロットID, ウェーハID, テスト日時, **良品/不良品情報**
+製品のテスト方法（標準的なCP試験か、Fail-StopのCPY試験か）によって、使用するSQLクエリを動的に切り替える仕組みを導入しています。
+
+1.  **標準クエリ (`YIELD_QUERY`)**: 不良BINを含む詳細なテスト結果を取得します。
+2.  **CPYクエリ (`CPY_YIELD_QUERY`)**: Fail-Stop試験用のクエリ。PASSしたダイの情報のみを想定しています。
+
+**設定方法:**
+`src/modules/sql_queries.py` 内の `YIELD_QUERY_MAP` 辞書に、CPYクエリを使用したい製品名を追加してください。ここで指定されていない製品は、自動的に標準の `YIELD_QUERY` が使われます。
+
+```python
+# src/modules/sql_queries.py
+
+YIELD_QUERY_MAP = {
+    # 'PRODUCT_FAIL_STOP': CPY_YIELD_QUERY, # CPYを使用する製品をここに登録
+    'DEFAULT': YIELD_QUERY,
+}
+```
+
+以下に各クエリのテンプレートを示します。実際の環境に合わせてテーブル名や列名を修正してください。
 
 ```sql
--- src/modules/sql_queries.py の YIELD_QUERY
-SELECT
-    PRODUCT_NAME AS "Product",
-    ...
-FROM
-    YOUR_YIELD_TABLE
-WHERE
-    PRODUCT_NAME = :product_name
+-- YIELD_QUERY (標準)
+SELECT PRODUCT_NAME AS "Product", ... FROM YOUR_YIELD_TABLE ...
+
+-- CPY_YIELD_QUERY (Fail-Stop用)
+SELECT PRODUCT_NAME AS "Product", ... FROM YOUR_CPY_TABLE ...
 ```
 
 #### B. WATデータ (Wafer Acceptance Test)

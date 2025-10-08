@@ -37,6 +37,9 @@ def get_db_connection():
 def load_data_from_db(_conn, product_name: str) -> dict[str, pd.DataFrame]:
     """指定された製品のデータをデータベースから読み込みます。
 
+    製品名に応じて、`sql_queries.YIELD_QUERY_MAP` を参照し、
+    適切な歩留まりクエリ（標準 or CPY）を動的に選択します。
+
     Args:
         _conn: oracledb.Connection オブジェクト
         product_name: 取得対象の製品名
@@ -50,10 +53,15 @@ def load_data_from_db(_conn, product_name: str) -> dict[str, pd.DataFrame]:
         return {}
 
     try:
+        # 製品名に応じた歩留まりクエリを選択
+        yield_query = sql_queries.YIELD_QUERY_MAP.get(
+            product_name, sql_queries.YIELD_QUERY_MAP["DEFAULT"]
+        )
+
         # パラメータを指定してSQLを実行 (SQLインジェクション対策)
         params = {"product_name": product_name}
 
-        df_sort = pd.read_sql_query(sql_queries.YIELD_QUERY, _conn, params=params)
+        df_sort = pd.read_sql_query(yield_query, _conn, params=params)
         df_wat = pd.read_sql_query(sql_queries.WAT_QUERY, _conn, params=params)
         df_specs = pd.read_sql_query(sql_queries.SPECS_QUERY, _conn, params=params)
 
