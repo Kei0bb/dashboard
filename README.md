@@ -63,8 +63,8 @@ streamlit run main.py
 *   **`src/modules/sidebar.py`**: サイドバーのUIコンポーネントを管理します。
 *   **`src/modules/spc_charts.py`**: SPC関連のチャート作成関数を格納します。
 *   **`src/modules/yield_charts.py`**: 歩留まり関連のチャート作成関数を格納します。
-*   **`src/modules/db_utils.py`**: データベースへの接続とデータ取得のロジックを管理します。
-*   **`src/modules/sql_queries.py`**: データベースからデータを取得するためのSQLクエリを、Pythonの文字列定数として一元管理します。
+*   **`src/modules/db_utils.py`**: データベースへの接続とデータ取得のロジックを管理します。取得したWATデータ（縦積み）をアプリケーションが要求する形式（横持ち）に変換する役割も担います。
+*   **`src/modules/sql_queries.py`**: データベースからデータを取得するためのSQLクエリを、Pythonの文字列定数として一元管理します。製品ごとに使用するクエリを切り替えるためのマッピングも定義します。
 
 ## 8. データソースの管理
 
@@ -89,47 +89,36 @@ dsn = "your_oracle_host:1521/your_service_name"
 
 ### 8.3. データベース連携 SQLガイド
 
-本番用のデータベースと連携する際には、ダッシュボードが必要とするデータ構造に合わせてSQLクエリを準備する必要があります。SQLクエリはすべて **`src/modules/sql_queries.py`** で一元管理されています。
+本番用のデータベースと連携する際には、**`src/modules/sql_queries.py`** に定義されているSQLクエリを、実際の環境に合わせて修正する必要があります。
 
 #### A. 歩留まりデータ (Yield / Sort)
 
-製品のテスト方法（標準的なCP試験か、Fail-StopのCPY試験か）によって、使用するSQLクエリを動的に切り替える仕組みを導入しています。
-
-1.  **標準クエリ (`YIELD_QUERY`)**: 不良BINを含む詳細なテスト結果を取得します。
-2.  **CPYクエリ (`CPY_YIELD_QUERY`)**: Fail-Stop試験用のクエリ。PASSしたダイの情報のみを想定しています。
-
-**設定方法:**
-`src/modules/sql_queries.py` 内の `YIELD_QUERY_MAP` 辞書に、CPYクエリを使用したい製品名を追加してください。ここで指定されていない製品は、自動的に標準の `YIELD_QUERY` が使われます。
+-   **目的**: 歩留まりの集計、不良モードの分析
+-   **クエリの動的選択**: `db_utils.py` は、`sql_queries.py` 内の `YIELD_QUERY_MAP` を参照し、製品名に基づいて使用するSQLクエリを自動的に切り替えます。これにより、Fail-Stop製品（CPY）と標準製品（CP）で異なるロジックのクエリを使い分けることが可能です。
 
 ```python
-# src/modules/sql_queries.py
-
+# src/modules/sql_queries.py の例
 YIELD_QUERY_MAP = {
-    # 'PRODUCT_FAIL_STOP': CPY_YIELD_QUERY, # CPYを使用する製品をここに登録
-    'DEFAULT': YIELD_QUERY,
+    'PRODUCT_FAIL_STOP': CPY_YIELD_QUERY, # CPYを使用する製品
+    'DEFAULT': YIELD_QUERY, # 標準製品
 }
-```
-
-以下に各クエリのテンプレートを示します。実際の環境に合わせてテーブル名や列名を修正してください。
-
-```sql
--- YIELD_QUERY (標準)
-SELECT PRODUCT_NAME AS "Product", ... FROM YOUR_YIELD_TABLE ...
-
--- CPY_YIELD_QUERY (Fail-Stop用)
-SELECT PRODUCT_NAME AS "Product", ... FROM YOUR_CPY_TABLE ...
 ```
 
 #### B. WATデータ (Wafer Acceptance Test)
 
 -   **目的**: 電気特性の分布、トレンド、ウェーハマップの表示
--   **必要な列**: 製品名, ロットID, ウェーハID, 座標(X,Y), **各種測定パラメータ**
+-   **データ形式**: データベースからは、1行に1つの測定値が含まれる「**縦積み (Long Format)**」形式でデータを取得します。
+-   **変換処理**: `db_utils.py` 内で、取得した縦積みデータをPandasの `pivot_table` を使って、各パラメータが列となる「**横持ち (Wide Format)**」形式に自動的に変換します。
+
+**`WAT_QUERY`** は、この縦積み形式でデータを取得できるように、パラメータ名を持つ列 (`Parameter`) と測定値を持つ列 (`Value`) をSELECTするように記述してください。
 
 ```sql
--- src/modules/sql_queries.py の WAT_QUERY
+-- src/modules/sql_queries.py の WAT_QUERY テンプレート
 SELECT
     PRODUCT_NAME AS "Product",
-    ...
+    ...,
+    PARAMETER_NAME_COLUMN AS "Parameter", -- パラメータ名が入っている列
+    VALUE_COLUMN AS "Value"              -- 測定値が入っている列
 FROM
     YOUR_WAT_TABLE
 WHERE
@@ -139,13 +128,15 @@ WHERE
 #### C. 規格値データ (Specs)
 
 -   **目的**: WATデータの規格上限(USL)・下限(LSL)の表示
--   **必要な列**: 製品名, パラメータ名, **USL**, **LSL**
+-   **必要な列**: 製品名, パラメータ名, USL, LSL
 
 ```sql
 -- src/modules/sql_queries.py の SPECS_QUERY
 SELECT
     PRODUCT_NAME AS "Product",
-    ...
+    PARAMETER_NAME AS "Parameter",
+    UPPER_SPEC_LIMIT AS "USL",
+    LOWER_SPEC_LIMIT AS "LSL"
 FROM
     YOUR_SPECS_TABLE
 WHERE

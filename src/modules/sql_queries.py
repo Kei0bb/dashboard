@@ -53,20 +53,19 @@ YIELD_QUERY_MAP = {
 
 # --- WAT/SPECS クエリ (変更なし) ---
 WAT_QUERY = """
--- 製品名を指定してWATデータを取得します。
+-- 製品名を指定してWATデータを取得します (縦積みデータ形式)。
+-- この形式は、1行に1つのパラメータ測定値が含まれることを想定しています。
 -- YOUR_WAT_TABLE を実際のテーブル名に、各列名も実際の列名に合わせてください。
 SELECT
     PRODUCT_NAME AS "Product",
-    LOT_ID AS "BulkID", -- BulkIDとしてロットIDを使用する例
+    LOT_ID AS "BulkID",
     WAFER_ID AS "WaferID",
     DIE_X AS "DieX",
     DIE_Y AS "DieY",
     TEST_SITE AS "Site",
     TEST_TIMESTAMP AS "Time",
-    -- 以下に、測定パラメータの列を記述します。
-    PARAM_VTH AS "VTH",
-    PARAM_ID_SAT AS "IDSAT"
-    -- ... 必要なパラメータの分だけ追加 ...
+    PARAMETER_NAME_COLUMN AS "Parameter", -- パラメータ名が入っている列
+    VALUE_COLUMN AS "Value"              -- 測定値が入っている列
 FROM
     YOUR_WAT_TABLE
 WHERE
