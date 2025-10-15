@@ -5,18 +5,15 @@
 
 # --- 標準的な歩留まりクエリ (CP) ---
 YIELD_QUERY = """
--- 製品名を指定して歩留まりデータを取得します。
+-- 製品名を指定して歩留まりデータを取得します (縦積み形式)。
+-- 1行が1ダイのテスト結果を表すことを想定しています。
 -- YOUR_YIELD_TABLE を実際のテーブル名に、各列名も実際の列名に合わせてください。
 SELECT
     PRODUCT_NAME AS "Product",
     LOT_ID AS "LotID",
     WAFER_ID AS "WaferID",
     TEST_TIMESTAMP AS "Time",
-    -- スキーマに合わせてCASE文を修正してください。
-    CASE WHEN TEST_BIN = 1 THEN 1 ELSE 0 END AS "0_PASS",
-    CASE WHEN TEST_BIN = 2 THEN 1 ELSE 0 END AS "FAIL_BIN_2",
-    CASE WHEN TEST_BIN = 3 THEN 1 ELSE 0 END AS "FAIL_BIN_3"
-    -- ... 必要な不良BINの分だけ追加 ...
+    TEST_BIN AS "Bin" -- テスト結果のBIN番号 (e.g., 1, 2, 3, ...)
 FROM
     YOUR_YIELD_TABLE
 WHERE
@@ -25,17 +22,16 @@ WHERE
 
 # --- Fail-Stop用の歩留まりクエリ (CPY) ---
 CPY_YIELD_QUERY = """
--- Fail-Stop試験の製品向けに歩留まりデータを取得します。
+-- Fail-Stop試験の製品向けに歩留まりデータを取得します (縦積み形式)。
 -- CPYデータは通常、PASSしたダイの情報のみを持つため、
--- ここでは単純に1行を1PASSとしてカウントする例を示します。
+-- ここではBIN番号として常に「1」(良品)を返す例を示します。
 -- YOUR_CPY_TABLE を実際のテーブル名に、各列名も実際の列名に合わせてください。
 SELECT
     PRODUCT_NAME AS "Product",
     LOT_ID AS "LotID",
     WAFER_ID AS "WaferID",
     TEST_TIMESTAMP AS "Time",
-    1 AS "0_PASS", -- 1行 = 1 PASSダイ
-    0 AS "FAIL_BIN_2" -- Fail-Stopなので不良BINは存在しない想定
+    1 AS "Bin" -- 1行 = 1 PASSダイとみなし、BIN番号「1」を割り当てる
 FROM
     YOUR_CPY_TABLE
 WHERE

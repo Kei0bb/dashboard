@@ -1,162 +1,147 @@
-# 半導体ダッシュボード
+# 📈 半導体製造データダッシュボード
 
-## 1. 概要
+このダッシュボードは、半導体製造プロセスで発生する歩留まりやWAT（ウェーハ受け入れテスト）のデータを可視化・分析するためのStreamlitアプリケーションです。
 
-このプロジェクトは、Streamlitで構築されたファブレス半導体企業向けのWebベースのダッシュボードです。ウェーハの歩留まりやウェーハ受け入れテスト（WAT）の統計的プロセス制御（SPC）データなど、製造データを可視化・分析するための使いやすいインターフェースを提供します。このアプリケーションは、モジュール化され、メンテナンスしやすいように設計されています。
+---
 
-## 2. 主な機能
+## ✨ 主な機能
 
-*   **インタラクティブなダッシュボード**: Streamlitで構築された、シンプルでクリーンなUI。
-*   **階層的なデータ分析**: 全体トレンドのサマリーから、特定のロットやウェーハへのドリルダウン分析が可能。
-*   **明示的なデータ更新**: サイドバーの「Run Analysis」ボタンにより、ユーザーが明示的に指示するまでデータ処理やグラフ描画は実行されません。
-*   **動的な製品選択**: `data`ディレクトリのフォルダ構成に基づき、サイドバーから製品を簡単に切り替え可能。
-*   **セキュアな接続情報管理**: StreamlitのSecrets management機能 (`.streamlit/secrets.toml`) を利用してデータベース接続情報を安全に管理します。
-*   **モジュール化アーキテクチャ**: UI、データ処理、チャート作成などの機能がモジュールとして整理されており、高いメンテナンス性と拡張性を持ちます。
+-   **📊 インタラクティブな可視化**: Lot別、Wafer別のドリルダウン分析や、カスタマイズ可能なSPCチャートを提供。
+-   **🔌 柔軟なデータソース**: Oracleデータベース（本番）とローカルCSV（開発）の両方に対応。
+-   **🔐 安全な認証情報管理**: StreamlitのSecrets機能を利用し、データベースの接続情報を安全に管理。
+-   **🧩 モジュール化設計**: 機能ごとにコードが整理されており、メンテナンスと機能追加が容易です。
+-   **⚡ 動的なSQLクエリ**: 製品の特性（例: Fail-Stop品）に応じて、実行するSQLクエリを自動で切り替え。
 
-## 3. ディレクトリ構成
+---
+
+## 🚀 実行方法
+
+1.  **リポジトリをクローンします。**
+
+2.  **必要なライブラリをインストールします。**
+    ```bash
+    # uvを使っている場合
+    uv pip install -r requirements.txt
+    ```
+
+3.  **データベース接続情報を設定します。（本番モードの場合）**
+    `.streamlit/secrets.toml` ファイルを作成し、以下の内容を記述します。このファイルはGitの管理対象外です。
+    ```toml
+    # .streamlit/secrets.toml
+    [database]
+    username = "your_username"
+    password = "your_password"
+    dsn = "your_oracle_host:1521/your_service_name"
+    ```
+
+4.  **アプリケーションを起動します。**
+    ```bash
+    streamlit run main.py
+    ```
+
+---
+
+## 🔧 アーキテクチャと設計
+
+### ディレクトリ構成
 
 ```
 /
-├── .streamlit/          # Streamlit設定
-├── data/                # ローカルテスト用CSVデータ
-├── pages/               # アプリケーションページ
-│   ├── 1_Yield_Dev.py   # 開発用 歩留まりページ
-│   ├── 1_Yield_Prod.py  # 本番用 歩留まりページ
-│   ├── 2_WAT_SPC_Dev.py # 開発用 WAT/SPCページ
-│   └── 2_WAT_SPC_Prod.py# 本番用 WAT/SPCページ
-├── src/                 # ソースコード
+├── .streamlit/          # Streamlit設定 (secrets.toml, config.toml)
+├── data/                # 開発用のCSVデータ
+├── pages/               # 各ページのUI定義
+│   ├── 1_Yield_Prod.py  # 本番用: 歩留まりページ
+│   └── 2_WAT_SPC_Dev.py # 開発用: WAT/SPCページ
+├── src/                 # アプリケーションのコアロジック
 │   └── modules/
-│       ├── db_utils.py
-│       ├── sidebar.py
-│       ├── spc_charts.py
-│       ├── sql_queries.py # SQLクエリを管理
+│       ├── db_utils.py      # DB接続とデータ変換ロジック
+│       ├── sql_queries.py   # SQLクエリの一元管理
+│       ├── yield_charts.py  # 歩留まりチャート生成
 │       └── ...
-├── main.py              # アプリケーションのホームページ
-└── ...
+└── main.py              # アプリケーションのホームページ
 ```
 
-(一部抜粋・簡略化)
+### データの流れ (本番モード)
 
-## 5. 実行方法
+本アプリケーションの核心は、データベースから取得した正規化された「**縦積みデータ**」を、分析に適した「**横持ちデータ**」へ動的に変換する点にあります。この処理は歩留まり(Yield)と電気特性(WAT)の両方で共通化されています。
 
-以下のコマンドで、Streamlitアプリケーションを直接起動します。
-
-```bash
-streamlit run main.py
+```mermaid
+graph TD
+    A[Oracle DB] -- SQL Query --> B(db_utils.py);
+    subgraph B [データ取得・変換]
+        direction LR
+        B1["1. 縦積みデータ取得<br>(Long Format)"] -- pivot_table --> B2["2. 横持ちデータへ変換<br>(Wide Format)"];
+    end
+    B -- DataFrame --> C[pages/];
+    subgraph C [UI/可視化]
+        C1[歩留まりチャート] & C2[SPCチャート];
+    end
 ```
 
-起動後、サイドバーに各ページの開発版（Dev）と本番版（Prod）が表示されます。目的に応じて、表示したいページを直接選択してください。
+1.  `db_utils.py` が `sql_queries.py` からSQLクエリを読み込み、DBから縦積みデータを取得します。
+2.  取得したデータは、`pandas.pivot_table` によって横持ちデータに変換されます。
+    -   **歩留まり**: 各ウェーハのBIN毎の**個数を集計**します。
+    -   **WAT**: 各測定パラメータを**列に展開**します。
+3.  変換されたDataFrameが各ページに渡され、チャートとして描画されます。
 
-*   **`_Prod`ページ**: データベースからのデータ読み込みを前提としています。
-*   **`_Dev`ページ**: データベースとローカルCSVファイルの両方からデータ読み込みを選択できます。
+この設計により、データベースの物理スキーマとアプリケーションを疎結合に保ち、メンテナンス性を高めています。
 
+---
 
-## 6. 使い方
+## 🔌 データベース連携ガイド
 
-1.  サイドバーで製品を選択します。
-2.  実行したいデータソースに対応する「Run Analysis」ボタンをクリックします。（本番モードではボタンは1つです）
-3.  各ページで分析結果を確認します。
+連携を成功させるには、`src/modules/sql_queries.py` のSQLクエリを、お使いのデータベース環境に合わせて正しく設定する必要があります。
 
-## 7. モジュールの概要
+### A. 歩留まり (Yield) データ
 
-*   **`src/modules/utils.py`**: データソースごとに独立したデータ読み込み関数を格納します。
-*   **`src/modules/sidebar.py`**: サイドバーのUIコンポーネントを管理します。
-*   **`src/modules/spc_charts.py`**: SPC関連のチャート作成関数を格納します。
-*   **`src/modules/yield_charts.py`**: 歩留まり関連のチャート作成関数を格納します。
-*   **`src/modules/db_utils.py`**: データベースへの接続とデータ取得のロジックを管理します。取得したWATデータ（縦積み）をアプリケーションが要求する形式（横持ち）に変換する役割も担います。
-*   **`src/modules/sql_queries.py`**: データベースからデータを取得するためのSQLクエリを、Pythonの文字列定数として一元管理します。製品ごとに使用するクエリを切り替えるためのマッピングも定義します。
+-   **データ形式**: 1行が1ダイのテスト結果を表す「**縦積み**」で取得します。BIN番号を格納する列 (`Bin`) が必要です。
+-   **SQLテンプレート**:
+    ```sql
+    -- sql_queries.py の YIELD_QUERY
+    SELECT
+        ...,
+        TEST_BIN AS "Bin" -- テスト結果のBIN番号 (e.g., 1, 2, 3, ...)
+    FROM YOUR_YIELD_TABLE
+    ```
+-   **動的クエリ選択**: 製品特性（例: Fail-Stop品）に応じて算出ロジックが異なる場合、`YIELD_QUERY_MAP` で使用するクエリをマッピングできます。
 
-## 8. データソースの管理
+### B. WAT (電気特性) データ
 
-### 8.1. 開発モード (CSV)
+-   **データ形式**: 1行が1つの測定値を表す「**縦積み**」で取得します。パラメータ名 (`Parameter`) と測定値 (`Value`) の列が必要です。
+-   **SQLテンプレート**:
+    ```sql
+    -- sql_queries.py の WAT_QUERY
+    SELECT
+        ...,
+        PARAMETER_NAME_COLUMN AS "Parameter", -- Vth, Idsatなどの名前が入る列
+        VALUE_COLUMN AS "Value"              -- 1.23, 4.56などの測定値が入る列
+    FROM YOUR_WAT_TABLE
+    ```
 
-開発モードでは、「Run Analysis (CSV)」ボタンを使用することで、`data/`ディレクトリ内のCSVファイルをデータソースとして利用できます。
+### C. 規格値 (Spec) データ
 
-### 8.2. 本番モード (Oracle DB)
+-   WATパラメータの規格上限（USL）と下限（LSL）を定義します。WATデータと同様に、パラメータ名をキーにして値を取得します。
 
-本番モードでは、アプリケーションは `.streamlit/secrets.toml` ファイルに定義された情報を使ってOracleデータベースに接続します。このファイルが存在しない、または情報が不完全な場合はエラーが表示されます。
+---
 
-```toml
-# .streamlit/secrets.toml
+## 🌟 今後の拡張案 (Roadmap)
 
-[database]
-username = "your_actual_username"
-password = "your_actual_password"
-dsn = "your_oracle_host:1521/your_service_name"
-```
+このダッシュボードをさらに発展させるためのアイデアです。
 
-**重要:** この `secrets.toml` ファイルは `.gitignore` によってバージョン管理から除外されています。絶対にリポジトリにコミットしないでください。
+### 機能強化
 
-### 8.3. データベース連携 SQLガイド
+-   **[認証・認可]** ユーザーログイン機能を導入し、ロール（管理者、エンジニア等）に応じた閲覧権限を付与する。
+-   **[データ書き出し]** 表示しているデータをCSVやExcel形式でダウンロードできる機能を追加する。
+-   **[アラート機能]** SPCルールから外れたロットや、歩留まりが閾値を下回った場合に、メールやSlackで自動通知する仕組みを構築する。
+-   **[データ入力]** ダッシュボード上から特定のロットやウェーハに対してコメントやタグ（例: 「実験ウェーハ」）を付けられるようにする。
 
-本番用のデータベースと連携する際には、**`src/modules/sql_queries.py`** に定義されているSQLクエリを、実際の環境に合わせて修正する必要があります。
+### パフォーマンス・運用
 
-#### A. 歩留まりデータ (Yield / Sort)
+-   **[キャッシュ戦略の最適化]** 大量データに対応するため、`st.cache_data` のより高度な利用や、中間集計テーブルの活用を検討する。
+-   **[CI/CDの導入]** GitHub Actionsなどを利用して、コードのテスト、Lint、デプロイを自動化する。
+-   **[設定のUI化]** 現在はコードで管理しているSQLのマッピングや定数を、管理者向けのWeb UIから設定できるようにする。
 
--   **目的**: 歩留まりの集計、不良モードの分析
--   **クエリの動的選択**: `db_utils.py` は、`sql_queries.py` 内の `YIELD_QUERY_MAP` を参照し、製品名に基づいて使用するSQLクエリを自動的に切り替えます。これにより、Fail-Stop製品（CPY）と標準製品（CP）で異なるロジックのクエリを使い分けることが可能です。
+### 分析機能の高度化
 
-```python
-# src/modules/sql_queries.py の例
-YIELD_QUERY_MAP = {
-    'PRODUCT_FAIL_STOP': CPY_YIELD_QUERY, # CPYを使用する製品
-    'DEFAULT': YIELD_QUERY, # 標準製品
-}
-```
-
-#### B. WATデータ (Wafer Acceptance Test)
-
--   **目的**: 電気特性の分布、トレンド、ウェーハマップの表示
--   **データ形式**: データベースからは、1行に1つの測定値が含まれる「**縦積み (Long Format)**」形式でデータを取得します。
--   **変換処理**: `db_utils.py` 内で、取得した縦積みデータをPandasの `pivot_table` を使って、各パラメータが列となる「**横持ち (Wide Format)**」形式に自動的に変換します。
-
-**`WAT_QUERY`** は、この縦積み形式でデータを取得できるように、パラメータ名を持つ列 (`Parameter`) と測定値を持つ列 (`Value`) をSELECTするように記述してください。
-
-```sql
--- src/modules/sql_queries.py の WAT_QUERY テンプレート
-SELECT
-    PRODUCT_NAME AS "Product",
-    ...,
-    PARAMETER_NAME_COLUMN AS "Parameter", -- パラメータ名が入っている列
-    VALUE_COLUMN AS "Value"              -- 測定値が入っている列
-FROM
-    YOUR_WAT_TABLE
-WHERE
-    PRODUCT_NAME = :product_name
-```
-
-#### C. 規格値データ (Specs)
-
--   **目的**: WATデータの規格上限(USL)・下限(LSL)の表示
--   **必要な列**: 製品名, パラメータ名, USL, LSL
-
-```sql
--- src/modules/sql_queries.py の SPECS_QUERY
-SELECT
-    PRODUCT_NAME AS "Product",
-    PARAMETER_NAME AS "Parameter",
-    UPPER_SPEC_LIMIT AS "USL",
-    LOWER_SPEC_LIMIT AS "LSL"
-FROM
-    YOUR_SPECS_TABLE
-WHERE
-    PRODUCT_NAME = :product_name
-```
-
-
-## 9. 設定 (Configuration)
-
-### 9.1. 動作モードの切り替え
-
-アプリケーションの動作モードは、環境変数 `APP_MODE` で制御します。
-
-*   **`production`**: 本番モード。データベース接続が必須となり、CSV関連のUIは非表示になります。
-*   **`development`** (または未設定): 開発モード。DBとCSVの両方のオプションが利用可能です。
-
-### 9.2. テーマ (Theme)
-
-アプリケーションのテーマは、`.streamlit/config.toml`ファイルでライトテーマに固定されています。
-
-## 10. 今後のロードマップ (Future Roadmap)
-
-（変更なし）
+-   **[相関分析]** 複数のWATパラメータ間の相関を可視化する散布図などを追加する。
+-   **[機械学習の導入]** 過去のデータから歩留まり低下の予兆を検知したり、異常なパラメータを自動で検出するモデルを組み込む。
