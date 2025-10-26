@@ -68,16 +68,4 @@ WHERE
     PRODUCT_NAME = :product_name
 """
 
-SPECS_QUERY = """
--- 製品名を指定して規格値を取得します。
--- YOUR_SPECS_TABLE を実際の規格値マスタテーブル名に、各列名も実際の列名に合わせてください。
-SELECT
-    PRODUCT_NAME AS "Product",
-    PARAMETER_NAME AS "Parameter",
-    UPPER_SPEC_LIMIT AS "USL",
-    LOWER_SPEC_LIMIT AS "LSL"
-FROM
-    YOUR_SPECS_TABLE
-WHERE
-    PRODUCT_NAME = :product_name
-"""
+

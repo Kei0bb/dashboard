@@ -11,6 +11,26 @@ from src.modules.db_utils import get_db_connection
 from src.modules.db_utils import load_data_from_db as fetch_data_from_db_tables
 
 
+@st.cache_data
+def load_specs_from_csv(product_id: str) -> pd.DataFrame | None:
+    """指定された製品の規格(specs)データをCSVから読み込みます。
+
+    Args:
+        product_id: 製品ID (例: 'SCP117A')
+
+    Returns:
+        規格データを含むDataFrame。見つからない場合はNone。
+    """
+    specs_path = os.path.join("data", product_id, "specs.csv")
+    try:
+        df = pd.read_csv(specs_path)
+        df.columns = df.columns.str.strip()
+        return df
+    except FileNotFoundError:
+        st.warning(f"Specs file not found at: {specs_path}")
+        return None
+
+
 def load_data_from_csv(product_id: str) -> dict[str, pd.DataFrame] | None:
     """Loads all data for a given product from local CSV files.
 
@@ -30,12 +50,14 @@ def load_data_from_csv(product_id: str) -> dict[str, pd.DataFrame] | None:
     try:
         sort_df = pd.read_csv(os.path.join(data_dir, "sort.csv"))
         wat_df = pd.read_csv(os.path.join(data_dir, "wat.csv"))
-        specs_df = pd.read_csv(os.path.join(data_dir, "specs.csv"))
+        specs_df = load_specs_from_csv(product_id) # 新しい関数を利用
+
+        if specs_df is None:
+            return None # specsが見つからない場合はエラー
 
         # Strip column names
         sort_df.columns = sort_df.columns.str.strip()
         wat_df.columns = wat_df.columns.str.strip()
-        specs_df.columns = specs_df.columns.str.strip()
 
         st.success("Successfully loaded data from CSV.")
         return {"sort": sort_df, "wat": wat_df, "specs": specs_df}

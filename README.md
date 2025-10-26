@@ -63,11 +63,16 @@
 
 ### データの流れ (本番モード)
 
-本アプリケーションの核心は、データベースから取得した正規化された「**縦積みデータ**」を、分析に適した「**横持ちデータ**」へ動的に変換する点にあります。この処理は歩留まり(Yield)と電気特性(WAT)の両方で共通化されています。
+本アプリケーションの核心は、データベースから取得した正規化された「**縦積みデータ**」を、分析に適した「**横持ちデータ**」へ動的に変換する点にあります。規格値(Specs)のみ、ローカルのCSVファイルから読み込まれます。
 
 ```mermaid
 graph TD
-    A[Oracle DB] -- SQL Query --> B(db_utils.py);
+    subgraph A [データソース]
+        A1[Oracle DB]
+        A2[CSV Files]
+    end
+    A1 -- Yield/WAT Data --> B(db_utils.py);
+    A2 -- Specs Data --> B;
     subgraph B [データ取得・変換]
         direction LR
         B1["1. 縦積みデータ取得<br>(Long Format)"] -- pivot_table --> B2["2. 横持ちデータへ変換<br>(Wide Format)"];
@@ -78,49 +83,15 @@ graph TD
     end
 ```
 
-1.  `db_utils.py` が `sql_queries.py` からSQLクエリを読み込み、DBから縦積みデータを取得します。
+1.  `db_utils.py` が、歩留まりとWATデータをDBから、規格値(Specs)を`data/<product>/specs.csv`から読み込みます。
 2.  取得したデータは、`pandas.pivot_table` によって横持ちデータに変換されます。
-    -   **歩留まり**: 各ウェーハのBIN毎の**個数を集計**します。
-    -   **WAT**: 各測定パラメータを**列に展開**します。
 3.  変換されたDataFrameが各ページに渡され、チャートとして描画されます。
-
-この設計により、データベースの物理スキーマとアプリケーションを疎結合に保ち、メンテナンス性を高めています。
-
----
-
-## 🔌 データベース連携ガイド
-
-連携を成功させるには、`src/modules/sql_queries.py` のSQLクエリを、お使いのデータベース環境に合わせて正しく設定する必要があります。
-
-### A. 歩留まり (Yield) データ
-
--   **データ形式**: 1行が1ダイのテスト結果を表す「**縦積み**」で取得します。BIN番号を格納する列 (`Bin`) が必要です。
--   **SQLテンプレート**:
-    ```sql
-    -- sql_queries.py の YIELD_QUERY
-    SELECT
-        ...,
-        TEST_BIN AS "Bin" -- テスト結果のBIN番号 (e.g., 1, 2, 3, ...)
-    FROM YOUR_YIELD_TABLE
-    ```
--   **動的クエリ選択**: 製品特性（例: Fail-Stop品）に応じて算出ロジックが異なる場合、`YIELD_QUERY_MAP` で使用するクエリをマッピングできます。
-
-### B. WAT (電気特性) データ
-
--   **データ形式**: 1行が1つの測定値を表す「**縦積み**」で取得します。パラメータ名 (`Parameter`) と測定値 (`Value`) の列が必要です。
--   **SQLテンプレート**:
-    ```sql
-    -- sql_queries.py の WAT_QUERY
-    SELECT
-        ...,
-        PARAMETER_NAME_COLUMN AS "Parameter", -- Vth, Idsatなどの名前が入る列
-        VALUE_COLUMN AS "Value"              -- 1.23, 4.56などの測定値が入る列
-    FROM YOUR_WAT_TABLE
-    ```
 
 ### C. 規格値 (Spec) データ
 
--   WATパラメータの規格上限（USL）と下限（LSL）を定義します。WATデータと同様に、パラメータ名をキーにして値を取得します。
+-   **データソース**: **CSVファイル**
+-   **パス**: `data/<product_name>/specs.csv`
+-   WATパラメータの規格上限（USL）と下限（LSL）を定義します。製品ごとのフォルダに配置されたCSVファイルから読み込まれます。
 
 ---
 

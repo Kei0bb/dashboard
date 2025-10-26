@@ -6,6 +6,7 @@ import pandas as pd
 import streamlit as st
 
 from . import sql_queries
+from .utils import load_specs_from_csv # specs読み込み関数をインポート
 
 
 @st.cache_resource
@@ -35,10 +36,11 @@ def get_db_connection():
 
 @st.cache_data
 def load_data_from_db(_conn, product_name: str) -> dict[str, pd.DataFrame]:
-    """指定された製品のデータをデータベースから読み込み、適切な形式に変換します。
+    """指定された製品のデータを読み込み、適切な形式に変換します。
 
-    - 歩留まり(Yield): 縦積み -> pivot_tableで集計 -> 横持ち
-    - 電気特性(WAT): 縦積み -> pivot_tableで変換 -> 横持ち
+    - 歩留まり(Yield): DBから取得 -> pivot_tableで集計 -> 横持ち
+    - 電気特性(WAT): DBから取得 -> pivot_tableで変換 -> 横持ち
+    - 規格値(Specs): CSVから取得
     """
     if not _conn:
         st.error("データベース接続がありません。")
@@ -57,24 +59,16 @@ def load_data_from_db(_conn, product_name: str) -> dict[str, pd.DataFrame]:
             index_cols = ["Product", "LotID", "WaferID", "Time"]
             valid_index_cols = [c for c in index_cols if c in df_sort_long.columns]
 
-            # pivot_tableで各BINの出現回数をカウント
             df_sort = df_sort_long.pivot_table(
-                index=valid_index_cols,
-                columns="Bin",
-                values="WaferID",  # カウント対象の列 (どの列でも良い)
-                aggfunc="count",
-                fill_value=0,    # 存在しないBINは0で埋める
+                index=valid_index_cols, columns="Bin", values="WaferID",
+                aggfunc="count", fill_value=0,
             )
 
-            # アプリケーションが期待する列名に変換 (例: 1 -> "0_PASS")
-            # このマッピングは実際のBIN定義に合わせて修正してください。
             bin_rename_map = {1: "0_PASS"}
             df_sort = df_sort.rename(columns=bin_rename_map)
-            # 不良BINは "FAIL_BIN_" プレフィックスを付ける例
             df_sort = df_sort.rename(
                 columns={c: f"FAIL_BIN_{c}" for c in df_sort.columns if c != "0_PASS"}
             )
-
             df_sort = df_sort.reset_index()
         else:
             df_sort = pd.DataFrame()
@@ -88,15 +82,16 @@ def load_data_from_db(_conn, product_name: str) -> dict[str, pd.DataFrame]:
             valid_pivot_index = [c for c in pivot_index if c in df_wat_long.columns]
 
             df_wat = df_wat_long.pivot_table(
-                index=valid_pivot_index,
-                columns="Parameter",
-                values="Value",
+                index=valid_pivot_index, columns="Parameter", values="Value",
             ).reset_index()
         else:
             df_wat = pd.DataFrame()
 
-        # 3. 規格値データの取得
-        df_specs = pd.read_sql_query(sql_queries.SPECS_QUERY, _conn, params=params)
+        # 3. 規格値データのCSVからの取得
+        df_specs = load_specs_from_csv(product_name)
+        if df_specs is None:
+            # specsがない場合は空のDataFrameを許容する
+            df_specs = pd.DataFrame()
 
         return {"sort": df_sort, "wat": df_wat, "specs": df_specs}
 
