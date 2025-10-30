@@ -16,7 +16,7 @@ def load_specs_from_csv(product_id: str) -> pd.DataFrame | None:
     """指定された製品の規格(specs)データをCSVから読み込みます。
 
     Args:
-        product_id: 製品ID (例: 'SCP117A')
+        product_id: 製品ID (例: 'productA')
 
     Returns:
         規格データを含むDataFrame。見つからない場合はNone。
@@ -35,7 +35,7 @@ def load_data_from_csv(product_id: str) -> dict[str, pd.DataFrame] | None:
     """Loads all data for a given product from local CSV files.
 
     Args:
-        product_id: The identifier for the product (e.g., 'SCP117A').
+        product_id: The identifier for the product (e.g., 'productA').
 
     Returns:
         A dictionary containing 'sort', 'wat', and 'specs' pandas DataFrames,
