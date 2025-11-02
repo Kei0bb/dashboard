@@ -5,67 +5,81 @@
 
 # --- 標準的な歩留まりクエリ (CP) ---
 YIELD_QUERY = """
--- 製品名を指定して歩留まりデータを取得します (縦積み形式)。
--- 1行が1ダイのテスト結果を表すことを想定しています。
--- YOUR_YIELD_TABLE を実際のテーブル名に、各列名も実際の列名に合わせてください。
+-- 標準的なCP(Chip Probe)テスト向けのクエリ。
+-- 1行が1ダイのテスト結果を表す「縦長形式」のデータを取得することを想定しています。
+-- db_utils.py側で、このBin列を使ってpivot_tableで集計が行われます。
 SELECT
-    PRODUCT_NAME AS "Product",
-    LOT_ID AS "LotID",
-    WAFER_ID AS "WaferID",
-    TEST_TIMESTAMP AS "Time",
-    TEST_BIN AS "Bin" -- テスト結果のBIN番号 (e.g., 1, 2, 3, ...)
+    t1.PRODUCT_ID AS "Product",
+    t1.LOT_ID AS "LotID",
+    t1.WAFER_ID AS "WaferID",
+    t1.REGIST_DATE AS "Time",
+    t2.BIN_CODE AS "Bin" -- ダイのテスト結果(Bin)
 FROM
-    YOUR_YIELD_TABLE
+    SONAR.SEMI_CP_HEADER t1
+LEFT OUTER JOIN
+    SONAR.SEMI_CP_RESULT t2 ON t1.CREATE_DATE = t2.CREATE_DATE
 WHERE
-    PRODUCT_NAME = :product_name
+    t1.PRODUCT_ID = :product_name
+    AND t2.REWORK_NEW = 0
+    AND t1.REGIST_DATE >= ADD_MONTHS(SYSDATE, -6)
+ORDER BY
+    t1.REGIST_DATE ASC
 """
 
-# --- Fail-Stop用の歩留まりクエリ (CPY) ---
+# --- CPY (Fail-Stop)用の歩留まりクエリ ---
 CPY_YIELD_QUERY = """
--- Fail-Stop試験の製品向けに歩留まりデータを取得します (縦積み形式)。
--- CPYデータは通常、PASSしたダイの情報のみを持つため、
--- ここではBIN番号として常に「1」(良品)を返す例を示します。
--- YOUR_CPY_TABLE を実際のテーブル名に、各列名も実際の列名に合わせてください。
+-- CPY (Chip Probe Yield) データ用のクエリ。
+-- このクエリは、各ウェーハ・各Binあたりのダイ数を集計済み(BinCount)の形で取得します。
+-- db_utils.py側で、このBinCount列を使って横持ちデータが作成されます。
 SELECT
-    PRODUCT_NAME AS "Product",
-    LOT_ID AS "LotID",
-    WAFER_ID AS "WaferID",
-    TEST_TIMESTAMP AS "Time",
-    1 AS "Bin" -- 1行 = 1 PASSダイとみなし、BIN番号「1」を割り当てる
+    t1.PRODUCT_ID AS "Product",
+    t1.LOT_ID AS "LotID",
+    t1.WAFER_ID AS "WaferID",
+    t1.REGIST_DATE AS "Time",
+    t2.BIN_CODE AS "Bin",
+    t2.BIN_COUNT AS "BinCount"
 FROM
-    YOUR_CPY_TABLE
+    SONAR.SEMI_CP_HEADER t1
+LEFT OUTER JOIN
+    SONAR.SEMI_CP_BIN_SUM t2 ON t1.CREATE_DATE = t2.CREATE_DATE
 WHERE
-    PRODUCT_NAME = :product_name
+    t1.PRODUCT_ID = :product_name
+    AND t1.PROCESS = 'CPY'
+    AND t2.REWORK_NEW = 0
+    AND t1.REGIST_DATE >= ADD_MONTHS(SYSDATE, -6)
+ORDER BY
+    t1.REGIST_DATE ASC
 """
 
 
 # --- 製品名と歩留まりクエリのマッピング ---
 # ここで指定されていない製品は、自動的にデフォルトのYIELD_QUERYが使用されます。
 YIELD_QUERY_MAP = {
-    # 'PRODUCT_FAIL_STOP': CPY_YIELD_QUERY, # CPYを使用する製品をここに登録
+    'productA': CPY_YIELD_QUERY,  # productA は集計済みのCPYクエリを使用
     'DEFAULT': YIELD_QUERY,
 }
 
 
 # --- WAT/SPECS クエリ (変更なし) ---
 WAT_QUERY = """
--- 製品名を指定してWATデータを取得します (縦積みデータ形式)。
--- この形式は、1行に1つのパラメータ測定値が含まれることを想定しています。
--- YOUR_WAT_TABLE を実際のテーブル名に、各列名も実際の列名に合わせてください。
+-- WAT (Wafer Acceptance Test) データ用のクエリ。
+-- 1行に1つのパラメータ測定値が含まれる「縦長形式」のデータを取得します。
+-- db_utils.py側で、このデータを使ってpivot_tableで横持ちデータが作成されます。
 SELECT
-    PRODUCT_NAME AS "Product",
-    LOT_ID AS "BulkID",
-    WAFER_ID AS "WaferID",
-    DIE_X AS "DieX",
-    DIE_Y AS "DieY",
-    TEST_SITE AS "Site",
-    TEST_TIMESTAMP AS "Time",
-    PARAMETER_NAME_COLUMN AS "Parameter", -- パラメータ名が入っている列
-    VALUE_COLUMN AS "Value"              -- 測定値が入っている列
+    t1.PRODUCT_ID AS "Product",
+    t1.SUBSTRATE_ID AS "BulkID",
+    t2.WAFER_ID AS "WaferID",
+    t2.SITE_No AS "Site",
+    t1.REGIST_DATE AS "Time",
+    t2.ITEM_NAME AS "Parameter",
+    t2.MEAS_DATA AS "Value"
 FROM
-    YOUR_WAT_TABLE
+    SONAR.WAT_HEADER t1
+LEFT OUTER JOIN
+    SONAR.WAT_DETAIL t2 ON t2.LOT_ID = t1.LOT_ID
 WHERE
-    PRODUCT_NAME = :product_name
+    t1.PRODUCT_ID = :product_name
+    AND t1.REGIST_DATE >= ADD_MONTHS(SYSDATE, -6)
 """
 
 

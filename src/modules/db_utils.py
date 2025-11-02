@@ -59,10 +59,24 @@ def load_data_from_db(_conn, product_name: str) -> dict[str, pd.DataFrame]:
             index_cols = ["Product", "LotID", "WaferID", "Time"]
             valid_index_cols = [c for c in index_cols if c in df_sort_long.columns]
 
-            df_sort = df_sort_long.pivot_table(
-                index=valid_index_cols, columns="Bin", values="WaferID",
-                aggfunc="count", fill_value=0,
-            )
+            # CPYデータ(集計済み)か標準データ(未集計)かをBinCountカラムの有無で判定
+            if "BinCount" in df_sort_long.columns:
+                # --- CPY (集計済み) データの場合 ---
+                # BinCountの値をそのまま使用してピボット
+                df_sort = df_sort_long.pivot_table(
+                    index=valid_index_cols,
+                    columns="Bin",
+                    values="BinCount",
+                    aggfunc="sum",  # 同一Binがあれば合計するが、通常は1行のはず
+                    fill_value=0,
+                )
+            else:
+                # --- 標準 (未集計) データの場合 ---
+                # 従来のロジック通り、Binの登場回数をカウントしてピボット
+                df_sort = df_sort_long.pivot_table(
+                    index=valid_index_cols, columns="Bin", values="WaferID",
+                    aggfunc="count", fill_value=0,
+                )
 
             bin_rename_map = {1: "0_PASS"}
             df_sort = df_sort.rename(columns=bin_rename_map)
