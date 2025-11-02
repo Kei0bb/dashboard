@@ -58,22 +58,11 @@ def get_db_connection():
 
 
 @st.cache_data
-def load_data_from_db(_conn, product_name: str) -> dict[str, pd.DataFrame]:
-    """指定された製品のデータを読み込み、適切な形式に変換します。
-
-    - 歩留まり(Yield): DBから取得 -> pivot_tableで集計 -> 横持ち
-    - 電気特性(WAT): DBから取得 -> pivot_tableで変換 -> 横持ち
-    - 規格値(Specs): CSVから取得
-    """
-    st.info(f"Loading data for product '{product_name}' from database...")
-    if not _conn:
-        st.error("データベース接続がありません。")
-        return {}
-
+def load_yield_data(_conn, product_name: str) -> pd.DataFrame:
+    """指定された製品の歩留まりデータをDBから読み込み、変換します。"""
+    df_sort = pd.DataFrame()
     try:
         params = {"product_name": product_name}
-
-        # 1. 歩留まりデータの取得と変換
         yield_query = sql_queries.YIELD_QUERY_MAP.get(
             product_name, sql_queries.YIELD_QUERY_MAP["DEFAULT"]
         )
@@ -83,20 +72,15 @@ def load_data_from_db(_conn, product_name: str) -> dict[str, pd.DataFrame]:
             index_cols = ["Product", "LotID", "WaferID", "Time"]
             valid_index_cols = [c for c in index_cols if c in df_sort_long.columns]
 
-            # CPYデータ(集計済み)か標準データ(未集計)かをBinCountカラムの有無で判定
             if "BinCount" in df_sort_long.columns:
-                # --- CPY (集計済み) データの場合 ---
-                # BinCountの値をそのまま使用してピボット
                 df_sort = df_sort_long.pivot_table(
                     index=valid_index_cols,
                     columns="Bin",
                     values="BinCount",
-                    aggfunc="sum",  # 同一Binがあれば合計するが、通常は1行のはず
+                    aggfunc="sum",
                     fill_value=0,
                 )
             else:
-                # --- 標準 (未集計) データの場合 ---
-                # 従来のロジック通り、Binの登場回数をカウントしてピボット
                 df_sort = df_sort_long.pivot_table(
                     index=valid_index_cols, columns="Bin", values="WaferID",
                     aggfunc="count", fill_value=0,
@@ -108,10 +92,19 @@ def load_data_from_db(_conn, product_name: str) -> dict[str, pd.DataFrame]:
                 columns={c: f"FAIL_BIN_{c}" for c in df_sort.columns if c != "0_PASS"}
             )
             df_sort = df_sort.reset_index()
-        else:
-            df_sort = pd.DataFrame()
+        return df_sort
 
-        # 2. WATデータの取得と変換
+    except Exception as e:
+        st.warning(f"歩留まりデータの読み込みに失敗しました: {e}")
+        return df_sort
+
+
+@st.cache_data
+def load_wat_data(_conn, product_name: str) -> pd.DataFrame:
+    """指定された製品のWATデータをDBから読み込み、変換します。"""
+    df_wat = pd.DataFrame()
+    try:
+        params = {"product_name": product_name}
         df_wat_long = pd.read_sql_query(sql_queries.WAT_QUERY, _conn, params=params)
         if not df_wat_long.empty:
             pivot_index = [
@@ -122,22 +115,8 @@ def load_data_from_db(_conn, product_name: str) -> dict[str, pd.DataFrame]:
             df_wat = df_wat_long.pivot_table(
                 index=valid_pivot_index, columns="Parameter", values="Value",
             ).reset_index()
-        else:
-            df_wat = pd.DataFrame()
-
-        # 3. 規格値データのCSVからの取得
-        df_specs = load_specs_from_csv(product_name)
-        if df_specs is None:
-            # specsがない場合は空のDataFrameを許容する
-            df_specs = pd.DataFrame()
-        
-        if df_sort.empty and df_wat.empty:
-            st.error(f"Could not find or load data for product '{product_name}' from the database.")
-            return {}
-
-        st.success("Successfully loaded data from database.")
-        return {"sort": df_sort, "wat": df_wat, "specs": df_specs}
+        return df_wat
 
     except Exception as e:
-        st.error(f"データベースからのデータ処理中にエラーが発生しました: {e}")
-        return {}
+        st.warning(f"WATデータの読み込みに失敗しました: {e}")
+        return df_wat

@@ -7,7 +7,7 @@ from src.modules.spc_charts import (
     create_wafer_map,
     load_spec_limits,
 )
-from src.modules.db_utils import get_db_connection, load_data_from_db
+from src.modules.db_utils import get_db_connection, load_wat_data, load_specs_from_csv
 
 st.set_page_config(page_title="WAT SPC Analysis", layout="wide")
 st.title("WAT Analysis Dashboard")
@@ -26,7 +26,11 @@ if run_button:
     if selected_product:
         conn = get_db_connection()
         if conn:
-            data = load_data_from_db(conn, selected_product)
+            st.info(f"Loading data for product '{selected_product}'...")
+            df_wat = load_wat_data(conn, selected_product)
+            df_specs = load_specs_from_csv(selected_product)
+            data = {"wat": df_wat, "specs": df_specs}
+            st.success("Successfully loaded data.")
     else:
         st.warning("Please select a product first.")
 

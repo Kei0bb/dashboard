@@ -1,7 +1,7 @@
 import streamlit as st
 
 from src.modules.sidebar import product_selector
-from src.modules.db_utils import get_db_connection, load_data_from_db
+from src.modules.db_utils import get_db_connection, load_yield_data, load_specs_from_csv
 from src.modules.yield_charts import (
     create_failure_mode_chart,
     create_summary_chart,
@@ -23,7 +23,11 @@ if run_button:
     if selected_product:
         conn = get_db_connection()
         if conn:
-            data = load_data_from_db(conn, selected_product)
+            st.info(f"Loading data for product '{selected_product}'...")
+            df_sort = load_yield_data(conn, selected_product)
+            df_specs = load_specs_from_csv(selected_product)
+            data = {"sort": df_sort, "specs": df_specs}
+            st.success("Successfully loaded data.")
     else:
         st.warning("Please select a product first.")
 
