@@ -43,15 +43,20 @@ This project is a web-based dashboard for visualizing and analyzing semiconducto
 ## Development Conventions
 
 -   **Data Source**: The app uses a hybrid data source model:
-    -   **Yield/WAT Data**: Loaded from an Oracle database in production mode, or from CSVs in the `data/` directory in development mode.
+    -   **Yield/WAT Data**: Loaded from an Oracle database in production mode, or from CSVs in the `data/` directory in development mode. All database queries are configured to fetch data from the last 6 months.
     -   **Specs Data**: **Always** loaded from a local CSV file located at `data/<product_name>/specs.csv`, regardless of the mode.
 -   **SQL Query Management**:
-    -   All SQL queries (for Yield and WAT) are centralized as Python string constants in `src/modules/sql_queries.py`.
-    -   Queries are designed to fetch data in a **long format**.
+    -   All SQL queries are centralized in `src/modules/sql_queries.py`. They are written for an Oracle DB and assume a specific schema (e.g., tables like `YOUR_SCHEMA.SEMI_CP_HEADER`, `YOUR_SCHEMA.WAT_HEADER`).
+    -   Queries are designed to fetch data in a **long format**, but with a key exception for CPY Yield data.
+    -   **Yield Queries**: Two types of queries are used:
+        1.  **Standard Yield**: Fetches raw, long-format data with one row per die, identified by a `Bin` column.
+        2.  **CPY Yield**: Fetches data that is pre-aggregated by bin, providing a `BinCount` column directly from the database.
     -   A dictionary map (`YIELD_QUERY_MAP`) is used to dynamically select the appropriate yield query based on the product name.
 -   **Data Transformation**:
     -   The core transformation logic resides in `load_data_from_db` within `src/modules/db_utils.py`.
-    -   **Yield Data**: Fetched with a `Bin` column. The `pivot_table` function is used with `aggfunc="count"` to count die per bin for each wafer, creating the wide-format summary.
+    -   **Yield Data**: The transformation logic dynamically adapts based on the input data format. It checks for the existence of a `BinCount` column:
+        -   If `BinCount` **exists** (CPY data), the `pivot_table` function uses this column for its values, effectively pivoting the pre-aggregated data.
+        -   If `BinCount` **does not exist** (Standard data), the `pivot_table` function uses `aggfunc="count"` to count die per bin for each wafer.
     -   **WAT Data**: Fetched with `Parameter` and `Value` columns. The `pivot_table` function is used to pivot the parameters into distinct columns.
 -   **Configuration**:
     -   **Credentials**: Managed via `.streamlit/secrets.toml`.

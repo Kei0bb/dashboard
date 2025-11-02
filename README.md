@@ -48,7 +48,7 @@
 ```
 /
 ├── .streamlit/          # Streamlit設定 (secrets.toml, config.toml)
-├── data/                # 開発用のCSVデータ
+├── data/                # 開発用のCSVデータ & 規格値(specs)ファイル
 ├── pages/               # 各ページのUI定義
 │   ├── 1_Yield_Prod.py  # 本番用: 歩留まりページ
 │   └── 2_WAT_SPC_Dev.py # 開発用: WAT/SPCページ
@@ -61,31 +61,51 @@
 └── main.py              # アプリケーションのホームページ
 ```
 
+### データベースの前提条件
+
+本番モードで動作させるには、アプリケーションが期待する特定のスキーマを持つOracleデータベースが必要です。
+
+-   **テーブル**: クエリは `YOUR_SCHEMA.SEMI_CP_HEADER`, `YOUR_SCHEMA.SEMI_CP_BIN_SUM`, `YOUR_SCHEMA.WAT_HEADER` などのテーブルに依存しています。詳細は `src/modules/sql_queries.py` を参照してください。
+-   **データ期間**: パフォーマンスと関連性を維持するため、すべてのクエリは `REGIST_DATE` に基づいて**過去6ヶ月**のデータのみを取得するように設定されています。
+
 ### データの流れ (本番モード)
 
-本アプリケーションの核心は、データベースから取得した正規化された「**縦積みデータ**」を、分析に適した「**横持ちデータ**」へ動的に変換する点にあります。規格値(Specs)のみ、ローカルのCSVファイルから読み込まれます。
+本アプリケーションの核心は、データベースから取得した「**縦積みデータ**」を、分析に適した「**横持ちデータ**」へ動的に変換する点にあります。特に歩留まりデータは、製品の特性に応じて2種類の形式を処理できる設計になっています。
 
 ```mermaid
 graph TD
     subgraph A [データソース]
-        A1[Oracle DB]
-        A2[CSV Files]
+        A1[Oracle DB];
+        A2[CSV Files];
     end
-    A1 -- Yield/WAT Data --> B(db_utils.py);
-    A2 -- Specs Data --> B;
-    subgraph B [データ取得・変換]
+
+    subgraph B [src/modules/db_utils.py]
         direction LR
-        B1["1. 縦積みデータ取得<br>(Long Format)"] -- pivot_table --> B2["2. 横持ちデータへ変換<br>(Wide Format)"];
+        B1["1. 縦積みデータ取得<br>(Long Format)"]
+        B2{データ形式を<br>チェック};
+        B1 -- Yield/WAT Data --> B2;
+        B2 -- CPY (集計済み) --> B3a[Pivot on BinCount];
+        B2 -- 標準 (未集計) --> B3b[Count Bins & Pivot];
+        subgraph B3 ["2. 横持ちデータへ変換<br>(Wide Format)"]
+            direction TB
+            B3a & B3b;
+        end
     end
-    B -- DataFrame --> C[pages/];
+
+    A2 -- Specs Data --> B;
+    B3 -- DataFrame --> C[pages/];
+
     subgraph C [UI/可視化]
         C1[歩留まりチャート] & C2[SPCチャート];
     end
 ```
 
-1.  `db_utils.py` が、歩留まりとWATデータをDBから、規格値(Specs)を`data/<product>/specs.csv`から読み込みます。
-2.  取得したデータは、`pandas.pivot_table` によって横持ちデータに変換されます。
-3.  変換されたDataFrameが各ページに渡され、チャートとして描画されます。
+1.  **データ取得**: `db_utils.py` が、`sql_queries.py` で定義されたクエリを使い、歩留まり(Yield)とWATデータをDBから取得します。規格値(Specs)は `data/<product>/specs.csv` から読み込まれます。
+2.  **歩留まりデータの変換**: `db_utils.py` は、取得した歩留まりデータに `BinCount` カラムが存在するかをチェックします。
+    -   **存在する場合 (CPYデータ)**: データは既にBinごとに集計済みと判断し、`BinCount` の値をそのまま使って横持ちデータに変換します。
+    -   **存在しない場合 (標準データ)**: データは未集計の生データと判断し、`pivot_table` を使って各Binの出現回数をカウントして横持ちデータに変換します。
+3.  **WATデータの変換**: 縦積み形式のWATデータは、パラメータ名をカラムに変換する形で横持ちデータに変換されます。
+4.  **可視化**: 変換されたDataFrameが各ページに渡され、インタラクティブなチャートとして描画されます。
 
 ### C. 規格値 (Spec) データ
 
