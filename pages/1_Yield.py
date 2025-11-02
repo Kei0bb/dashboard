@@ -1,34 +1,29 @@
 import streamlit as st
 
 from src.modules.sidebar import product_selector
-from src.modules.utils import load_data_from_csv, load_data_from_db
+from src.modules.db_utils import get_db_connection, load_data_from_db
 from src.modules.yield_charts import (
     create_failure_mode_chart,
     create_summary_chart,
     create_yield_distribution_chart,
 )
 
-st.set_page_config(page_title="Yield Analysis (Dev)", layout="wide")
+st.set_page_config(page_title="Yield Analysis", layout="wide")
 st.title("Yield Analysis")
-st.header("Development Mode", divider="rainbow")
 
 # サイドバー
 st.sidebar.title("Controls")
 selected_product = product_selector()
 st.sidebar.markdown("---")
-run_db_button = st.sidebar.button("Run Analysis (DB)")
-run_csv_button = st.sidebar.button("Run Analysis (CSV)")
+run_button = st.sidebar.button("Run Analysis")
 
 # データ読み込み処理
 data = None
-if run_db_button:
+if run_button:
     if selected_product:
-        data = load_data_from_db(selected_product)
-    else:
-        st.warning("Please select a product first.")
-elif run_csv_button:
-    if selected_product:
-        data = load_data_from_csv(selected_product)
+        conn = get_db_connection()
+        if conn:
+            data = load_data_from_db(conn, selected_product)
     else:
         st.warning("Please select a product first.")
 
@@ -67,5 +62,5 @@ if data:
     else:
         st.error(f"'sort' data not found for product: {selected_product}")
 
-elif not (run_db_button or run_csv_button):
-    st.info("サイドバーから品種を選択し、実行ボタンを押してください。")
+elif not run_button:
+    st.info("サイドバーから品種を選択し、「Run Analysis」ボタンを押してください。")

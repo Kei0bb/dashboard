@@ -10,4 +10,4 @@ wheels/
 .venv
 
 # Streamlit secrets
-.streamlit/secrets.toml
+.streamlit/secrets.toml.env

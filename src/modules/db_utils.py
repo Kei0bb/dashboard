@@ -1,12 +1,35 @@
 """
 データベース接続とデータ読み込みのためのユーティリティ関数を提供します。
 """
+import os
 import oracledb
 import pandas as pd
 import streamlit as st
+from dotenv import load_dotenv
 
 from . import sql_queries
-from .utils import load_specs_from_csv # specs読み込み関数をインポート
+
+load_dotenv()  # .envファイルから環境変数を読み込む
+
+
+@st.cache_data
+def load_specs_from_csv(product_id: str) -> pd.DataFrame | None:
+    """指定された製品の規格(specs)データをCSVから読み込みます。
+
+    Args:
+        product_id: 製品ID (例: 'productA')
+
+    Returns:
+        規格データを含むDataFrame。見つからない場合はNone。
+    """
+    specs_path = os.path.join("data", product_id, "specs.csv")
+    try:
+        df = pd.read_csv(specs_path)
+        df.columns = df.columns.str.strip()
+        return df
+    except FileNotFoundError:
+        st.warning(f"Specs file not found at: {specs_path}")
+        return None
 
 
 @st.cache_resource
@@ -17,9 +40,9 @@ def get_db_connection():
     """
     try:
         conn = oracledb.connect(
-            user=st.secrets["database"]["username"],
-            password=st.secrets["database"]["password"],
-            dsn=st.secrets["database"]["dsn"],
+            user=os.environ.get("DB_USERNAME"),
+            password=os.environ.get("DB_PASSWORD"),
+            dsn=os.environ.get("DB_DSN"),
         )
         print("Successfully connected to Oracle DB!")
         return conn
@@ -27,7 +50,7 @@ def get_db_connection():
         st.error(f"データベース接続エラー: {e}")
         return None
     except KeyError:
-        st.warning("データベースの接続情報が secrets.toml に設定されていません。")
+        st.warning("データベースの接続情報が環境変数に設定されていません。")
         return None
     except Exception as e:
         st.error(f"データベース接続中に予期せぬエラーが発生しました: {e}")
@@ -42,6 +65,7 @@ def load_data_from_db(_conn, product_name: str) -> dict[str, pd.DataFrame]:
     - 電気特性(WAT): DBから取得 -> pivot_tableで変換 -> 横持ち
     - 規格値(Specs): CSVから取得
     """
+    st.info(f"Loading data for product '{product_name}' from database...")
     if not _conn:
         st.error("データベース接続がありません。")
         return {}
@@ -106,7 +130,12 @@ def load_data_from_db(_conn, product_name: str) -> dict[str, pd.DataFrame]:
         if df_specs is None:
             # specsがない場合は空のDataFrameを許容する
             df_specs = pd.DataFrame()
+        
+        if df_sort.empty and df_wat.empty:
+            st.error(f"Could not find or load data for product '{product_name}' from the database.")
+            return {}
 
+        st.success("Successfully loaded data from database.")
         return {"sort": df_sort, "wat": df_wat, "specs": df_specs}
 
     except Exception as e:

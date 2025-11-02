@@ -18,20 +18,21 @@
 
 1.  **リポジトリをクローンします。**
 
-2.  **必要なライブラリをインストールします。**
+2.  **依存関係をインストールします。**
+    `python-dotenv`が追加されたため、以下のコマンドで依存関係を更新・インストールしてください。
     ```bash
     # uvを使っている場合
-    uv pip install -r requirements.txt
+    uv pip sync pyproject.toml
     ```
 
-3.  **データベース接続情報を設定します。（本番モードの場合）**
-    `.streamlit/secrets.toml` ファイルを作成し、以下の内容を記述します。このファイルはGitの管理対象外です。
-    ```toml
-    # .streamlit/secrets.toml
-    [database]
-    username = "your_username"
-    password = "your_password"
-    dsn = "your_oracle_host:1521/your_service_name"
+3.  **環境変数を設定します。**
+    プロジェクトのルートディレクトリに `.env` という名前のファイルを作成し、データベースの接続情報を記述します。このファイルは `.gitignore` により、Gitの管理対象外となります。
+
+    ```env
+    # .envファイル
+    DB_USERNAME="your_username"
+    DB_PASSWORD="your_password"
+    DB_DSN="your_oracle_host:1521/your_service_name"
     ```
 
 4.  **アプリケーションを起動します。**
