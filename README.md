@@ -1,139 +1,79 @@
-# 📈 半導体製造データダッシュボード
+# 📈 半導体製造ダッシュボード（再構築版）
 
-このダッシュボードは、半導体製造プロセスで発生する歩留まりやWAT（ウェーハ受け入れテスト）のデータを可視化・分析するためのStreamlitアプリケーションです。
-
----
-
-## ✨ 主な機能
-
--   **📊 インタラクティブな可視化**: Lot別、Wafer別のドリルダウン分析や、カスタマイズ可能なSPCチャートを提供。
--   **🔌 柔軟なデータソース**: Oracleデータベース（本番）とローカルCSV（開発）の両方に対応。
--   **🔐 安全な認証情報管理**: StreamlitのSecrets機能を利用し、データベースの接続情報を安全に管理。
--   **🧩 モジュール化設計**: 機能ごとにコードが整理されており、メンテナンスと機能追加が容易です。
--   **⚡ 動的なSQLクエリ**: 製品の特性（例: Fail-Stop品）に応じて、実行するSQLクエリを自動で切り替え。
+Streamlit で動作する歩留まり / WAT 監視ダッシュボードを一から再設計しました。  
+設定は `DB_BACKEND` によって **SQLiteモック** と **Oracle本番** を即座に切り替えられます。
 
 ---
 
-## 🚀 実行方法
+## 🚀 クイックスタート
 
-1.  **リポジトリをクローンします。**
-
-2.  **依存関係をインストールします。**
-    `python-dotenv`が追加されたため、以下のコマンドで依存関係を更新・インストールしてください。
-    ```bash
-    # uvを使っている場合
-    uv pip sync pyproject.toml
-    ```
-
-3.  **環境変数を設定します。**
-    プロジェクトのルートディレクトリに `.env` という名前のファイルを作成し、データベースの接続情報を記述します。このファイルは `.gitignore` により、Gitの管理対象外となります。
-
-    ```env
-    # .envファイル
-    DB_USERNAME="your_username"
-    DB_PASSWORD="your_password"
-    DB_DSN="(DESCRIPTION=(ADDRESS=(PROTOCOL=TCP)(HOST=your_oracle_host)(PORT=1521))(CONNECT_DATA=(SID=your_sid)))"
-    ```
-
-4.  **アプリケーションを起動します。**
-    ```bash
-    streamlit run main.py
-    ```
-
----
-
-## 🔧 アーキテクチャと設計
-
-### ディレクトリ構成
-
-```
-/
-├── .streamlit/          # Streamlit設定 (secrets.toml, config.toml)
-├── data/                # 開発用のCSVデータ & 規格値(specs)ファイル
-├── pages/               # 各ページのUI定義
-│   ├── 1_Yield_Prod.py  # 本番用: 歩留まりページ
-│   └── 2_WAT_SPC_Dev.py # 開発用: WAT/SPCページ
-├── src/                 # アプリケーションのコアロジック
-│   └── modules/
-│       ├── db_utils.py      # DB接続とデータ変換ロジック
-│       ├── sql_queries.py   # SQLクエリの一元管理
-│       ├── yield_charts.py  # 歩留まりチャート生成
-│       └── ...
-└── main.py              # アプリケーションのホームページ
+```bash
+uv pip sync pyproject.toml   # 依存関係をインストール
+cp .env.example .env         # 必要なら雛形をコピー
+streamlit run main.py        # もしくは uv run streamlit run main.py
 ```
 
-### データベースの前提条件
+### .env 例
+```env
+APP_ENV=development
+DB_BACKEND=sqlite          # 本番時は oracle
+DB_SQLITE_PATH=data/test.db
 
-本番モードで動作させるには、アプリケーションが期待する特定のスキーマを持つOracleデータベースが必要です。
-
--   **テーブル**: クエリは `YOUR_SCHEMA.SEMI_CP_HEADER`, `YOUR_SCHEMA.SEMI_CP_BIN_SUM`, `YOUR_SCHEMA.WAT_HEADER` などのテーブルに依存しています。詳細は `src/modules/sql_queries.py` を参照してください。
--   **データ期間**: パフォーマンスと関連性を維持するため、すべてのクエリは `REGIST_DATE` に基づいて**過去6ヶ月**のデータのみを取得するように設定されています。
-
-### データの流れ (本番モード)
-
-本アプリケーションの核心は、データベースから取得した「**縦積みデータ**」を、分析に適した「**横持ちデータ**」へ動的に変換する点にあります。特に歩留まりデータは、製品の特性に応じて2種類の形式を処理できる設計になっています。
-
-```mermaid
-graph TD
-    subgraph A [データソース]
-        A1[Oracle DB];
-        A2[CSV Files];
-    end
-
-    subgraph B [src/modules/db_utils.py]
-        direction LR
-        B1["1. 縦積みデータ取得<br>(Long Format)"]
-        B2{データ形式を<br>チェック};
-        B1 -- Yield/WAT Data --> B2;
-        B2 -- CPY (集計済み) --> B3a[Pivot on BinCount];
-        B2 -- 標準 (未集計) --> B3b[Count Bins & Pivot];
-        subgraph B3 ["2. 横持ちデータへ変換<br>(Wide Format)"]
-            direction TB
-            B3a & B3b;
-        end
-    end
-
-    A2 -- Specs Data --> B;
-    B3 -- DataFrame --> C[pages/];
-
-    subgraph C [UI/可視化]
-        C1[歩留まりチャート] & C2[SPCチャート];
-    end
+# Oracle モードで利用
+# DB_USERNAME=your_user
+# DB_PASSWORD=your_pass
+# DB_DSN="(DESCRIPTION=...)"
 ```
-
-1.  **データ取得**: `db_utils.py` が、`sql_queries.py` で定義されたクエリを使い、歩留まり(Yield)とWATデータをDBから取得します。規格値(Specs)は `data/<product>/specs.csv` から読み込まれます。
-2.  **歩留まりデータの変換**: `db_utils.py` は、取得した歩留まりデータに `BinCount` カラムが存在するかをチェックします。
-    -   **存在する場合 (CPYデータ)**: データは既にBinごとに集計済みと判断し、`BinCount` の値をそのまま使って横持ちデータに変換します。
-    -   **存在しない場合 (標準データ)**: データは未集計の生データと判断し、`pivot_table` を使って各Binの出現回数をカウントして横持ちデータに変換します。
-3.  **WATデータの変換**: 縦積み形式のWATデータは、パラメータ名をカラムに変換する形で横持ちデータに変換されます。
-4.  **可視化**: 変換されたDataFrameが各ページに渡され、インタラクティブなチャートとして描画されます。
-
-### C. 規格値 (Spec) データ
-
--   **データソース**: **CSVファイル**
--   **パス**: `data/<product_name>/specs.csv`
--   WATパラメータの規格上限（USL）と下限（LSL）を定義します。製品ごとのフォルダに配置されたCSVファイルから読み込まれます。
 
 ---
 
-## 🌟 今後の拡張案 (Roadmap)
+## 🗂 ディレクトリ構成
 
-このダッシュボードをさらに発展させるためのアイデアです。
+```
+src/app/
+  config.py        # 環境変数の集約
+  data/            # SQLite / Oracle リポジトリ実装
+  services/        # UI と DB の橋渡し
+  charts/          # Plotly チャート
+  specs.py         # specs.csv ローダー
+pages/             # Streamlit サブページ
+data/              # SQLite DB と specs サンプル
+```
 
-### 機能強化
+---
 
--   **[認証・認可]** ユーザーログイン機能を導入し、ロール（管理者、エンジニア等）に応じた閲覧権限を付与する。
--   **[データ書き出し]** 表示しているデータをCSVやExcel形式でダウンロードできる機能を追加する。
--   **[アラート機能]** SPCルールから外れたロットや、歩留まりが閾値を下回った場合に、メールやSlackで自動通知する仕組みを構築する。
--   **[データ入力]** ダッシュボード上から特定のロットやウェーハに対してコメントやタグ（例: 「実験ウェーハ」）を付けられるようにする。
+## 🧱 アーキテクチャ
 
-### パフォーマンス・運用
+- **Config**: `AppConfig` が単一の真実となり、Streamlit からも CLI からも同じ設定を参照。
+- **Repository Pattern**: `create_repository()` でバックエンドを生成し、UI 側は実装を意識しない。
+- **Service Layer**: 加工ロジックは `YieldService` / `WATService` に集約し、ページは描画のみ担当。
+- **Charts**: Plotly 図は `src/app/charts/` に分離し、スタイル統一と再利用性を改善。
 
--   **[キャッシュ戦略の最適化]** 大量データに対応するため、`st.cache_data` のより高度な利用や、中間集計テーブルの活用を検討する。
--   **[CI/CDの導入]** GitHub Actionsなどを利用して、コードのテスト、Lint、デプロイを自動化する。
--   **[設定のUI化]** 現在はコードで管理しているSQLのマッピングや定数を、管理者向けのWeb UIから設定できるようにする。
+---
 
-### 分析機能の高度化
+## 🧪 テストとデータ
 
--   **[相関分析]** 複数のWATパラメータ間の相関を可視化する散布図などを追加する。
--   **[機械学習の導入]** 過去のデータから歩留まり低下の予兆を検知したり、異常なパラメータを自動で検出するモデルを組み込む。
+- `data/test.db` にモックデータが含まれます。SQLite ドライバのみで動作確認可能。
+- 追加で CSV を増やしたい場合は `data/<product>/specs.csv` を作成し、`parameter,USL,LSL` 形式で追記してください。
+- 将来的に `tests/` ディレクトリを追加し、サービス層を `pytest` で検証することを想定しています。
+
+---
+
+## 🙋‍♀️ よくある操作
+
+| 用途 | コマンド |
+| ---- | -------- |
+| 依存追加 | `uv add <package>` |
+| Lint/format (任意) | `uv run ruff check` / `uv run ruff format` |
+| Streamlit 開発サーバ | `uv run streamlit run main.py` |
+
+---
+
+## 📝 コントリビューション
+
+1. issue で改善案を相談  
+2. フィーチャーブランチで変更を加える  
+3. `README.md` と `AGENTS.md` の関連部分を更新  
+4. 最低限の動作確認（SQLite モードでの起動）を記載
+
+再構築版について質問や改善提案があれば、issue / PR でいつでもどうぞ。Happy hacking! 🛠️
