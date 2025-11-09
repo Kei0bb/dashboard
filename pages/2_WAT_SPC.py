@@ -72,7 +72,7 @@ def main() -> None:
         with columns[idx % 3]:
             st.plotly_chart(
                 build_bulk_trend_chart(trend, param, usl, lsl),
-                use_container_width=True,
+                width="stretch",
             )
 
     st.markdown("### Drill-down")
@@ -89,12 +89,12 @@ def main() -> None:
         col_a, col_b = st.columns(2)
         with col_a:
             st.plotly_chart(
-                build_wafer_map(df_detail, selected_param), use_container_width=True
+                build_wafer_map(df_detail, selected_param), width="stretch"
             )
         with col_b:
             st.plotly_chart(
                 build_individual_chart(df_detail, selected_param, usl, lsl),
-                use_container_width=True,
+                width="stretch",
             )
 
 

@@ -1,3 +1,4 @@
+import pandas as pd
 import streamlit as st
 
 from src.app.charts import (
@@ -36,40 +37,55 @@ def main() -> None:
         st.warning("品種を選択してください。")
         return
 
+    stage_data: dict[str, pd.DataFrame]
     if run_analysis:
-        df = service.load_dataset(selected_product)
-        if df.empty:
-            st.warning(f"{selected_product} のデータが見つかりません。")
+        stage_data = service.load_all_stages(selected_product)
+        cp_df = stage_data.get("CP")
+        if cp_df is None or cp_df.empty:
+            st.warning(f"{selected_product} のCPデータが見つかりません。")
             return
-        st.session_state[SESSION_KEY] = {"product": selected_product, "data": df}
+        st.session_state[SESSION_KEY] = {"product": selected_product, "data": stage_data}
         state = st.session_state[SESSION_KEY]
-        st.success(f"{selected_product} のデータを読み込みました。")
+        st.success(f"{selected_product} のCP/FTデータを読み込みました。")
     elif state:
-        df = state["data"]
+        stage_data = state["data"]
         st.info(f"{selected_product} のキャッシュ済みデータを使用しています。")
     else:
         st.warning("データが存在しません。Run Analysis を実行してください。")
         return
 
-    agg_period = st.radio(
-        "集計粒度",
-        options=["Daily", "Weekly", "Monthly", "Quarterly", "BulkID"],
-        horizontal=True,
-    )
-    df_summary = service.build_summary(df, agg_period)
-    st.plotly_chart(build_yield_combo_chart(df_summary), use_container_width=True)
+    tabs_placeholder = st.container()
+    tabs = tabs_placeholder.tabs(["CP", "FT"])
 
-    col1, col2 = st.columns(2)
-    with col1:
-        st.markdown("#### Lot別分布")
-        st.plotly_chart(build_distribution_chart(df), use_container_width=True)
-    with col2:
-        st.markdown("#### 不良モード構成比")
-        fig_failure = build_failure_mode_chart(df)
-        if fig_failure.data:
-            st.plotly_chart(fig_failure, use_container_width=True)
-        else:
-            st.info("FAIL_BIN_* カラムが存在しません。")
+    def render_stage_section(stage_name: str, df_stage: pd.DataFrame) -> None:
+        agg_period = st.radio(
+            "集計粒度",
+            options=["Daily", "Weekly", "Monthly", "Quarterly", "BulkID"],
+            horizontal=True,
+            key=f"agg_period_{stage_name.lower()}",
+        )
+        df_summary = service.build_summary(df_stage, agg_period)
+        st.plotly_chart(build_yield_combo_chart(df_summary), width="stretch")
+
+        col1, col2 = st.columns(2)
+        with col1:
+            st.markdown("#### Lot別分布")
+            st.plotly_chart(build_distribution_chart(df_stage), width="stretch")
+        with col2:
+            st.markdown("#### 不良モード構成比")
+            fig_failure = build_failure_mode_chart(df_stage)
+            if fig_failure.data:
+                st.plotly_chart(fig_failure, width="stretch")
+            else:
+                st.info("FAIL_BIN_* カラムが存在しません。")
+
+    for stage, tab in zip(YieldService.STAGES, tabs):
+        with tab:
+            df_stage = stage_data.get(stage)
+            if df_stage is None or df_stage.empty:
+                st.info(f"{stage} データは利用できません。")
+                continue
+            render_stage_section(stage, df_stage)
 
 
 if __name__ == "__main__":

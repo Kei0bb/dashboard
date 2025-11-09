@@ -23,7 +23,7 @@ class OracleRepository:
             dsn=self.config.database.oracle_dsn,
         )
 
-    def load_yield_overview(self, product_name: str) -> pd.DataFrame:
+    def load_yield_overview(self, product_name: str, stage: str = "CP") -> pd.DataFrame:
         params = {"product_name": product_name}
         df_long = pd.read_sql_query(YIELD_QUERY, self._conn, params=params)
         if df_long.empty:

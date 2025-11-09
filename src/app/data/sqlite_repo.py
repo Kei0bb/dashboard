@@ -15,7 +15,24 @@ class SQLiteRepository:
         self.config = config
         self._conn = sqlite3.connect(self.config.database.sqlite_path or "data/test.db")
 
-    def load_yield_overview(self, product_name: str) -> pd.DataFrame:
+    def load_yield_overview(self, product_name: str, stage: str = "CP") -> pd.DataFrame:
+        stage_upper = stage.upper()
+        if stage_upper not in {"CP", "FT"}:
+            raise ValueError(f"Unsupported stage: {stage}")
+
+        df_cp = self._build_cp_frame(product_name)
+        if df_cp.empty:
+            return df_cp
+
+        if stage_upper == "CP":
+            df_stage = df_cp.copy()
+        else:
+            df_stage = self._build_ft_frame(df_cp)
+
+        df_stage["Stage"] = stage_upper
+        return df_stage
+
+    def _build_cp_frame(self, product_name: str) -> pd.DataFrame:
         query = """
             SELECT product AS Product, lot_id AS LotID, yield AS PassRate
             FROM yields
@@ -27,10 +44,7 @@ class SQLiteRepository:
             return df
 
         base_time = datetime.utcnow()
-        df["Time"] = [
-            base_time - timedelta(days=idx)
-            for idx in range(len(df))
-        ]
+        df["Time"] = [base_time - timedelta(days=idx) for idx in range(len(df))]
         df["WaferID"] = df["LotID"]
         df["BulkID"] = df["LotID"]
         df["SortNo"] = 1
@@ -39,6 +53,22 @@ class SQLiteRepository:
         df["0_PASS"] = df["PassRate"]
         df["FAIL_BIN_1"] = (100 - df["PassRate"]).clip(lower=0)
         return df.drop(columns=["PassRate"])
+
+    def _build_ft_frame(self, df_cp: pd.DataFrame) -> pd.DataFrame:
+        df = df_cp.copy()
+        offsets = pd.Series(range(len(df)), index=df.index, dtype=float)
+        degradation = 1.5 + (offsets % 5) * 0.4
+        df["0_PASS"] = (df["0_PASS"] - degradation).clip(lower=60.0)
+        fail_cols = [c for c in df.columns if c.startswith("FAIL_BIN_")]
+        if fail_cols:
+            remaining = (100 - df["0_PASS"]).clip(lower=0)
+            per_col = remaining / len(fail_cols)
+            for col in fail_cols:
+                df[col] = per_col
+        else:
+            df["FAIL_BIN_1"] = (100 - df["0_PASS"]).clip(lower=0)
+        df["Time"] = df["Time"] + timedelta(hours=12)
+        return df
 
     def load_wat_measurements(self, product_name: str) -> pd.DataFrame:
         query = """
