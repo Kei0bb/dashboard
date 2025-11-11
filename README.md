@@ -13,6 +13,28 @@ cp .env.example .env         # 必要なら雛形をコピー
 streamlit run main.py        # もしくは uv run streamlit run main.py
 ```
 
+### 本番（Oracle）での実行手順
+1. **依存インストール**  
+   ```bash
+   uv pip sync pyproject.toml
+   ```
+   Oracle 接続には `python-oracledb` が必要です（pyproject に含まれています）。
+2. **環境変数を設定**  
+   `.env` を開き、少なくとも次を指定します。
+   ```env
+   DB_BACKEND=oracle
+   DB_USERNAME=本番DBユーザー
+   DB_PASSWORD=本番DBパスワード
+   DB_DSN=db-host.example.com:1521/ORCL   # SID または (DESCRIPTION=...) 形式でも可
+   ```
+3. **接続確認**  
+   `uv run python -c "import oracledb; print('connected')"` を実行し、ライブラリがロードできるか確認します。
+4. **アプリ起動**  
+   ```bash
+   uv run streamlit run main.py
+   ```
+   ブラウザで http://localhost:8501 を開き、サイドバーで品種を選択→`Run Analysis` を押してデータ取得できるか確認してください。
+
 ### .env 例
 ```env
 APP_ENV=development
