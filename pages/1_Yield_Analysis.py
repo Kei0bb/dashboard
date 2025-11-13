@@ -26,7 +26,7 @@ def main() -> None:
 
     SESSION_KEY = "yield_page_state"
     state = st.session_state.get(SESSION_KEY)
-    if state and selected_product and state.get("product") != selected_product:
+    if state and selected_product and state.get("product") != selected_product.name:
         state = None
 
     if not run_analysis and not state:
@@ -42,14 +42,17 @@ def main() -> None:
         stage_data = service.load_all_stages(selected_product)
         cp_df = stage_data.get("CP")
         if cp_df is None or cp_df.empty:
-            st.warning(f"{selected_product} のCPデータが見つかりません。")
+            st.warning(f"{selected_product.label} のCPデータが見つかりません。")
             return
-        st.session_state[SESSION_KEY] = {"product": selected_product, "data": stage_data}
+        st.session_state[SESSION_KEY] = {
+            "product": selected_product.name,
+            "data": stage_data,
+        }
         state = st.session_state[SESSION_KEY]
-        st.success(f"{selected_product} のCP/FTデータを読み込みました。")
+        st.success(f"{selected_product.label} のCP/FTデータを読み込みました。")
     elif state:
         stage_data = state["data"]
-        st.info(f"{selected_product} のキャッシュ済みデータを使用しています。")
+        st.info(f"{selected_product.label} のキャッシュ済みデータを使用しています。")
     else:
         st.warning("データが存在しません。Run Analysis を実行してください。")
         return

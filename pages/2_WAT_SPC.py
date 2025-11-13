@@ -27,7 +27,7 @@ def main() -> None:
 
     SESSION_KEY = "wat_page_state"
     state = st.session_state.get(SESSION_KEY)
-    if state and product and state.get("product") != product:
+    if state and product and state.get("product") != product.name:
         state = None
 
     if not run_analysis and not state:
@@ -38,18 +38,22 @@ def main() -> None:
         return
 
     if run_analysis:
-        df = wat_service.load_dataset(product)
+        df = wat_service.load_dataset(product.source_name)
         if df.empty:
             st.warning("対象データが空です。")
             return
-        specs = load_specs(product)
-        st.session_state[SESSION_KEY] = {"product": product, "data": df, "specs": specs}
+        specs = load_specs(product.name)
+        st.session_state[SESSION_KEY] = {
+            "product": product.name,
+            "data": df,
+            "specs": specs,
+        }
         state = st.session_state[SESSION_KEY]
-        st.success(f"{product} のWATデータを読み込みました。")
+        st.success(f"{product.label} のWATデータを読み込みました。")
     elif state:
         df = state["data"]
         specs = state["specs"]
-        st.info(f"{product} のキャッシュ済みデータを使用しています。")
+        st.info(f"{product.label} のキャッシュ済みデータを使用しています。")
     else:
         st.warning("データが存在しません。Run Analysis を実行してください。")
         return

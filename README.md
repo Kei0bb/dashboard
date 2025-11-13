@@ -1,16 +1,20 @@
 # 📈 半導体製造ダッシュボード（再構築版）
 
 Streamlit で動作する歩留まり / WAT 監視ダッシュボードを一から再設計しました。  
-設定は `DB_BACKEND` によって **SQLiteモック** と **Oracle本番** を即座に切り替えられます。
+設定は `DB_BACKEND` によって **SQLiteモック** と **Oracle本番** を即座に切り替えられます。  
+品種の定義は `config/products.yaml` で一元管理され、フォルダ構成と実DBの `PRODUCT_ID` を安全に紐づけられます。
 
 ---
 
 ## 🚀 クイックスタート
 
 ```bash
-uv pip sync pyproject.toml   # 依存関係をインストール
+uv pip sync pyproject.toml   # 依存関係をインストール（pyyaml/oracledb含む）
 cp .env.example .env         # 必要なら雛形をコピー
+vim config/products.yaml     # 品種設定を編集
 streamlit run main.py        # もしくは uv run streamlit run main.py
+
+`config/products.yaml` が存在しない場合は `data/` 直下のサブフォルダから自動検出しますが、実運用では YAML を編集して品種ID・表示名・Oracle上の `PRODUCT_ID` を明示してください。
 ```
 
 ### 本番（Oracle）での実行手順
@@ -58,9 +62,30 @@ src/app/
   services/        # UI と DB の橋渡し
   charts/          # Plotly チャート
   specs.py         # specs.csv ローダー
+  products.py      # YAML から製品メタデータを読み込み
 pages/             # Streamlit サブページ
 data/              # SQLite DB と specs サンプル
+config/products.yaml # 品種ごとの設定（name, label, data_subdir, source_name など）
 ```
+
+---
+
+## 🧾 品種設定（config/products.yaml）
+
+```yaml
+products:
+  - name: productA          # UIでの識別子
+    label: "Product A"      # サイドバー表示名
+    data_subdir: "productA" # data/ 以下のディレクトリ
+    source_name: "SCP117A"  # DBクエリに渡す PRODUCT_ID
+    stages: ["CP", "FT"]    # 表示したい工程
+```
+
+- `config/products.yaml` が存在すれば最優先で使用されます。  
+- `source_name` を Oracle 実データの `PRODUCT_ID` に合わせれば、フォルダ名とDB名が異なっていても問題ありません。  
+- `data/<data_subdir>/specs.csv` を置くと WAT ページで管理限界線が表示されます。
+
+YAMLを用意しない場合は `data/` 以下のフォルダ名がそのまま品種 ID として扱われます。
 
 ---
 
@@ -75,8 +100,9 @@ data/              # SQLite DB と specs サンプル
 
 ## 🧪 テストとデータ
 
-- `data/test.db` にモックデータが含まれます。SQLite ドライバのみで動作確認可能。
-- 追加で CSV を増やしたい場合は `data/<product>/specs.csv` を作成し、`parameter,USL,LSL` 形式で追記してください。
+- `data/test.db` にモックデータが含まれます。SQLite ドライバのみで動作確認可能（`source_name` が `productA` / `productB` の場合）。
+- 実データに近いモックを作りたい場合は `config/products.yaml` に品種を追加 → `data/<data_subdir>/specs.csv` や `test.db` を更新してください。
+- 追加で CSV を増やしたい場合は `data/<data_subdir>/specs.csv` を作成し、`parameter,USL,LSL` 形式で追記します。
 - 将来的に `tests/` ディレクトリを追加し、サービス層を `pytest` で検証することを想定しています。
 
 ---
@@ -99,3 +125,13 @@ data/              # SQLite DB と specs サンプル
 4. 最低限の動作確認（SQLite モードでの起動）を記載
 
 再構築版について質問や改善提案があれば、issue / PR でいつでもどうぞ。Happy hacking! 🛠️
+
+---
+
+## 🔮 将来の拡張アイデア
+
+- **自動テストとCI**：`pytest` + GitHub Actions を導入し、SQLite モックを用いたリグレッションテストを自動化。
+- **品種ごとの権限管理**：`config/products.yaml` にロール情報を追加し、特定ユーザーのみ特定製品へアクセスできるよう Streamlit 認証と連携。
+- **データ更新オーケストレーション**：Airflow / Dagster 等で Oracle → SQLite のモック更新をスケジュールし、より本番に近い検証環境を維持。
+- **観測性の強化**：Application Insights や OpenTelemetry を追加してクエリ時間・キャッシュヒット率を計測、パフォーマンスのボトルネックを可視化。
+- **ビジュアル強化**：Plotly テンプレートの共通化やダークテーマ対応、トレンドチャートへのアノテーション機能追加。

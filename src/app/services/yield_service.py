@@ -8,6 +8,7 @@ from typing import ClassVar
 import pandas as pd
 
 from ..data import DatabaseRepository
+from ..products import ProductDefinition, find_product_definition, list_products
 
 
 @dataclass
@@ -16,20 +17,22 @@ class YieldService:
 
     STAGES: ClassVar[tuple[str, str]] = ("CP", "FT")
 
-    def get_products(self, data_dir: str = "data") -> list[str]:
-        """data/配下のフォルダ名を品種リストとして返す。"""
-        from pathlib import Path
+    def get_products(self, data_dir: str = "data") -> list[ProductDefinition]:
+        """設定ファイル優先で品種リストを取得する。"""
+        return list_products(data_dir=data_dir)
 
-        path = Path(data_dir)
-        if not path.exists():
-            return []
-        return sorted([p.name for p in path.iterdir() if p.is_dir()])
+    def _resolve_source_name(self, product: ProductDefinition | str) -> str:
+        if isinstance(product, ProductDefinition):
+            return product.source_name
+        definition = find_product_definition(product)
+        return definition.source_name if definition else str(product)
 
-    def load_dataset(self, product_name: str, stage: str = "CP") -> pd.DataFrame:
+    def load_dataset(self, product: ProductDefinition | str, stage: str = "CP") -> pd.DataFrame:
         stage_upper = stage.upper()
         if stage_upper not in self.STAGES:
             raise ValueError(f"Unsupported stage: {stage}")
-        df = self.repo.load_yield_overview(product_name, stage_upper)
+        source_name = self._resolve_source_name(product)
+        df = self.repo.load_yield_overview(source_name, stage_upper)
         if df.empty:
             return df
         if "Time" in df.columns:
@@ -37,9 +40,9 @@ class YieldService:
         df["Stage"] = stage_upper
         return df
 
-    def load_all_stages(self, product_name: str) -> dict[str, pd.DataFrame]:
+    def load_all_stages(self, product: ProductDefinition | str) -> dict[str, pd.DataFrame]:
         """CP/FT両方のDataFrameを返す。"""
-        return {stage: self.load_dataset(product_name, stage) for stage in self.STAGES}
+        return {stage: self.load_dataset(product, stage) for stage in self.STAGES}
 
     @staticmethod
     def build_summary(df: pd.DataFrame, agg: str) -> pd.DataFrame:

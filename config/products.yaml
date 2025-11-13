@@ -1,0 +1,17 @@
+# 製品ごとのメタデータを定義する設定ファイル。
+# name:     UIやOracleクエリで用いる製品ID
+# label:    サイドバー等に表示する名称（省略時はname）
+# data_subdir: data/ 配下のディレクトリ名。specsやCSVなどの参照に使用
+# source_name: DBクエリやモックDBで参照する製品名。省略時はname
+# stages:   表示を許可する工程（CP/FTなど）
+products:
+  - name: productA
+    label: "Product A (CPY sample)"
+    data_subdir: "productA"
+    source_name: "productA"
+    stages: ["CP", "FT"]
+  - name: productB
+    label: "Product B"
+    data_subdir: "productB"
+    source_name: "productB"
+    stages: ["CP", "FT"]

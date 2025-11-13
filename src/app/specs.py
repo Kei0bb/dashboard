@@ -8,10 +8,14 @@ from pathlib import Path
 import pandas as pd
 import streamlit as st
 
+from .products import find_product_definition
+
 
 @lru_cache(maxsize=32)
 def load_specs(product_id: str, base_dir: str = "data") -> pd.DataFrame | None:
-    specs_path = Path(base_dir) / product_id / "specs.csv"
+    definition = find_product_definition(product_id, data_dir=base_dir)
+    data_subdir = definition.data_subdir if definition else product_id
+    specs_path = Path(base_dir) / data_subdir / "specs.csv"
     if not specs_path.exists():
         st.warning(f"Specs file not found: {specs_path}")
         return None

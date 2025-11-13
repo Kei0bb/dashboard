@@ -18,10 +18,12 @@ def main() -> None:
     st.markdown("### 利用可能な品種")
     products = yield_service.get_products()
     if not products:
-        st.warning("data/ 以下に製品ディレクトリがありません。")
+        st.warning("config/products.yaml も data/ 以下も製品が登録されていません。")
     else:
         for product in products:
-            st.markdown(f"- `{product}`")
+            st.markdown(
+                f"- `{product.name}` (label: {product.label}, data: `{product.data_subdir}`)"
+            )
 
     st.markdown("---")
     st.subheader("環境情報")
