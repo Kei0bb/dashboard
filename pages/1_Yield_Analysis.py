@@ -29,36 +29,44 @@ def main() -> None:
     if state and selected_product and state.get("product") != selected_product.name:
         state = None
 
-    if not run_analysis and not state:
-        st.info("サイドバーから Run Analysis を押してデータを読込んでください。")
-        return
-
     if not selected_product:
         st.warning("品種を選択してください。")
         return
 
-    stage_data: dict[str, pd.DataFrame]
-    if run_analysis:
-        stage_data = service.load_all_stages(selected_product)
-        cp_df = stage_data.get("CP")
-        if cp_df is None or cp_df.empty:
-            st.warning(f"{selected_product.label} のCPデータが見つかりません。")
-            return
-        st.session_state[SESSION_KEY] = {
-            "product": selected_product.name,
-            "data": stage_data,
-        }
-        state = st.session_state[SESSION_KEY]
-        st.success(f"{selected_product.label} のCP/FTデータを読み込みました。")
-    elif state:
-        stage_data = state["data"]
-        st.info(f"{selected_product.label} のキャッシュ済みデータを使用しています。")
-    else:
-        st.warning("データが存在しません。Run Analysis を実行してください。")
+    default_stage = state.get("stage") if state else YieldService.STAGES[0]
+    selected_stage = st.segmented_control(
+        "工程を選択",
+        options=list(YieldService.STAGES),
+        default=default_stage,
+        key="yield_stage_selector",
+    )
+
+    if not run_analysis and not state:
+        st.info("サイドバーから Run Analysis を押してデータを読込んでください。")
         return
 
-    tabs_placeholder = st.container()
-    tabs = tabs_placeholder.tabs(["CP", "FT"])
+    stage_cache: dict[str, pd.DataFrame] = {} if run_analysis else (state["data"] if state else {})
+    needs_load = run_analysis or selected_stage not in stage_cache
+
+    if needs_load:
+        df_stage = service.load_dataset(selected_product, selected_stage)
+        if df_stage.empty:
+            st.warning(f"{selected_product.label} の {selected_stage} データが見つかりません。")
+            return
+        stage_cache = stage_cache.copy()
+        stage_cache[selected_stage] = df_stage
+        st.session_state[SESSION_KEY] = {
+            "product": selected_product.name,
+            "data": stage_cache,
+            "stage": selected_stage,
+        }
+        if run_analysis:
+            st.success(f"{selected_product.label} の {selected_stage} データを読み込みました。")
+        else:
+            st.info(f"{selected_product.label} の {selected_stage} データを読み込みました。")
+    else:
+        df_stage = stage_cache[selected_stage]
+        st.info(f"{selected_product.label} のキャッシュ済み {selected_stage} データを使用しています。")
 
     def render_stage_section(stage_name: str, df_stage: pd.DataFrame) -> None:
         agg_period = st.radio(
@@ -82,13 +90,7 @@ def main() -> None:
             else:
                 st.info("FAIL_BIN_* カラムが存在しません。")
 
-    for stage, tab in zip(YieldService.STAGES, tabs):
-        with tab:
-            df_stage = stage_data.get(stage)
-            if df_stage is None or df_stage.empty:
-                st.info(f"{stage} データは利用できません。")
-                continue
-            render_stage_section(stage, df_stage)
+    render_stage_section(selected_stage, df_stage)
 
 
 if __name__ == "__main__":

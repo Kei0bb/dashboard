@@ -61,7 +61,7 @@ src/app/
   data/            # SQLite / Oracle リポジトリ実装
   services/        # UI と DB の橋渡し
   charts/          # Plotly チャート
-  specs.py         # specs.csv ローダー
+  specs.py         # config/specs 内の Spec YAML を読み込み
   products.py      # YAML から製品メタデータを読み込み
 pages/             # Streamlit サブページ
 data/              # SQLite DB と specs サンプル
@@ -76,14 +76,14 @@ config/products.yaml # 品種ごとの設定（name, label, data_subdir, source_
 products:
   - name: productA          # UIでの識別子
     label: "Product A"      # サイドバー表示名
-    data_subdir: "productA" # data/ 以下のディレクトリ
     source_name: "SCP117A"  # DBクエリに渡す PRODUCT_ID
     stages: ["CP", "FT"]    # 表示したい工程
+    spec_file: productA.yaml  # config/specs/productA.yaml を参照
 ```
 
 - `config/products.yaml` が存在すれば最優先で使用されます。  
 - `source_name` を Oracle 実データの `PRODUCT_ID` に合わせれば、フォルダ名とDB名が異なっていても問題ありません。  
-- `data/<data_subdir>/specs.csv` を置くと WAT ページで管理限界線が表示されます。
+- 管理限界値は `config/specs/<file>.yaml` に分割して記述し、`spec_file` で参照します。大量パラメータでも Git 管理しやすい構成です。
 
 YAMLを用意しない場合は `data/` 以下のフォルダ名がそのまま品種 ID として扱われます。
 
@@ -101,8 +101,8 @@ YAMLを用意しない場合は `data/` 以下のフォルダ名がそのまま�
 ## 🧪 テストとデータ
 
 - `data/test.db` にモックデータが含まれます。SQLite ドライバのみで動作確認可能（`source_name` が `productA` / `productB` の場合）。
-- 実データに近いモックを作りたい場合は `config/products.yaml` に品種を追加 → `data/<data_subdir>/specs.csv` や `test.db` を更新してください。
-- 追加で CSV を増やしたい場合は `data/<data_subdir>/specs.csv` を作成し、`parameter,USL,LSL` 形式で追記します。
+- 実データに近いモックを作りたい場合は `config/products.yaml` に品種を追加し、`specs` ブロックに管理限界を記述、必要なら `test.db` を更新してください。
+- 既存CSVは互換性のため残せますが、今後は YAML で一元管理することを推奨します。
 - 将来的に `tests/` ディレクトリを追加し、サービス層を `pytest` で検証することを想定しています。
 
 ---

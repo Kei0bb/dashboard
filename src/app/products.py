@@ -11,6 +11,7 @@ import yaml
 
 DEFAULT_CONFIG_PATH = Path("config/products.yaml")
 DEFAULT_DATA_DIR = Path("data")
+DEFAULT_SPEC_DIR = Path("config/specs")
 DEFAULT_STAGES: tuple[str, ...] = ("CP", "FT")
 
 
@@ -23,6 +24,8 @@ class ProductDefinition:
     data_subdir: str
     source_name: str
     stages: tuple[str, ...] = DEFAULT_STAGES
+    spec_file: str | None = None
+    specs: tuple[dict[str, object], ...] = tuple()
 
     def supports_stage(self, stage: str) -> bool:
         return stage.upper() in {s.upper() for s in self.stages}
@@ -53,6 +56,8 @@ def _load_configured_products(config_path: str) -> tuple[ProductDefinition, ...]
         data_subdir = str(item.get("data_subdir") or name)
         source_name = str(item.get("source_name") or name)
         stages = _normalize_stage_list(item.get("stages"))
+        spec_file = item.get("spec_file")
+        specs = tuple(item.get("specs") or ())
         products.append(
             ProductDefinition(
                 name=name,
@@ -60,6 +65,8 @@ def _load_configured_products(config_path: str) -> tuple[ProductDefinition, ...]
                 data_subdir=data_subdir,
                 source_name=source_name,
                 stages=stages,
+                spec_file=str(spec_file) if spec_file else None,
+                specs=specs,
             )
         )
     return tuple(products)
@@ -110,4 +117,4 @@ def find_product_definition(
     return None
 
 
-__all__ = ["ProductDefinition", "list_products", "find_product_definition"]
+__all__ = ["ProductDefinition", "list_products", "find_product_definition", "DEFAULT_SPEC_DIR"]

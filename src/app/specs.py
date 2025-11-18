@@ -1,4 +1,4 @@
-"""Spec CSVを読み込むユーティリティ。"""
+"""Spec設定をYAMLファイルから読み込むユーティリティ。"""
 
 from __future__ import annotations
 
@@ -6,22 +6,45 @@ from functools import lru_cache
 from pathlib import Path
 
 import pandas as pd
-import streamlit as st
+import yaml
 
-from .products import find_product_definition
+from .products import DEFAULT_SPEC_DIR, find_product_definition
+
+
+@lru_cache(maxsize=1)
+def _read_specs_file(relative_path: str) -> pd.DataFrame | None:
+    spec_path = DEFAULT_SPEC_DIR / relative_path
+    if not spec_path.exists():
+        return None
+    with spec_path.open(encoding="utf-8") as fp:
+        data = yaml.safe_load(fp) or {}
+    specs = data.get("specs")
+    if not specs:
+        return None
+    df = pd.DataFrame(specs)
+    if df.empty:
+        return None
+    df.columns = df.columns.str.strip()
+    return df
 
 
 @lru_cache(maxsize=32)
-def load_specs(product_id: str, base_dir: str = "data") -> pd.DataFrame | None:
-    definition = find_product_definition(product_id, data_dir=base_dir)
-    data_subdir = definition.data_subdir if definition else product_id
-    specs_path = Path(base_dir) / data_subdir / "specs.csv"
-    if not specs_path.exists():
-        st.warning(f"Specs file not found: {specs_path}")
+def load_specs(product_id: str) -> pd.DataFrame | None:
+    """config/products.yaml で指定された spec_file を読み込む。"""
+    definition = find_product_definition(product_id)
+    if definition is None:
         return None
-    df = pd.read_csv(specs_path)
-    df.columns = df.columns.str.strip()
-    return df
+    if definition.spec_file:
+        df = _read_specs_file(definition.spec_file)
+        if df is not None:
+            return df
+    if definition.specs:
+        df = pd.DataFrame(definition.specs)
+        if df.empty:
+            return None
+        df.columns = df.columns.str.strip()
+        return df
+    return None
 
 
 def extract_limits(spec_df: pd.DataFrame | None, parameter: str) -> tuple[float | None, float | None]:
@@ -30,6 +53,6 @@ def extract_limits(spec_df: pd.DataFrame | None, parameter: str) -> tuple[float 
     match = spec_df[spec_df["parameter"] == parameter]
     if match.empty:
         return None, None
-    usl = match["USL"].iloc[0] if "USL" in match else None
-    lsl = match["LSL"].iloc[0] if "LSL" in match else None
+    usl = match["USL"].iloc[0] if "USL" in spec_df.columns else None
+    lsl = match["LSL"].iloc[0] if "LSL" in spec_df.columns else None
     return usl, lsl

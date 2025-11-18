@@ -1,0 +1,4 @@
+specs:
+  - parameter: Param1
+    USL: 0.9
+    LSL: 0.7
