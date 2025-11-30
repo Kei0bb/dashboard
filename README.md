@@ -100,8 +100,8 @@ YAMLを用意しない場合は `data/` 以下のフォルダ名がそのまま�
 
 ## 🧪 テストとデータ
 
-- `data/test.db` にモックデータが含まれます。SQLite ドライバのみで動作確認可能（`source_name` が `productA` / `productB` の場合）。
-- 実データに近いモックを作りたい場合は `config/products.yaml` に品種を追加し、`specs` ブロックに管理限界を記述、必要なら `test.db` を更新してください。
+- `data/test.db` には `yields` / `bin_data` / `wat_data` のモックが含まれ、`bin_data` は `BinNo_BinName` + `EffectiveNum` を持つ Oracle 風の集計済みテーブルです。SQLite ドライバのみで動作確認できます。
+- 実データに近いモックを作りたい場合は `config/products.yaml` に品種を追加し、`spec_file` で `config/specs/*.yaml` を参照、必要なら `test.db` を更新してください。
 - 既存CSVは互換性のため残せますが、今後は YAML で一元管理することを推奨します。
 - 将来的に `tests/` ディレクトリを追加し、サービス層を `pytest` で検証することを想定しています。
 

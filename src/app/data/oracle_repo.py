@@ -31,7 +31,9 @@ SELECT
     h.WAFER_ID AS "WaferID",
     h.REGIST_DATE AS "Time",
     h.PROCESS AS "Process",
-    r.BIN_CODE AS "Bin"
+    h.EFFECTIVE_NUM AS "EffectiveNum",
+    r.BIN_CODE AS "Bin",
+    r.BIN_NAME AS "BinName"
 FROM SONAR.SEMI_CP_HEADER h
 LEFT JOIN SONAR.SEMI_CP_RESULT r
   ON h.SUBSTRATE_ID = r.SUBSTRATE_ID
@@ -53,8 +55,10 @@ SELECT
     h.WAFER_ID AS "WaferID",
     h.REGIST_DATE AS "Time",
     h.PROCESS AS "Process",
+    h.EFFECTIVE_NUM AS "EffectiveNum",
     b.BIN_CODE AS "Bin",
-    b.BIN_COUNT AS "BinCount"
+    b.BIN_COUNT AS "BinCount",
+    b.BIN_NAME AS "BinName"
 FROM SONAR.SEMI_CP_HEADER h
 LEFT JOIN SONAR.SEMI_CP_BIN_SUM b
   ON h.SUBSTRATE_ID = b.SUBSTRATE_ID
@@ -77,8 +81,10 @@ SELECT
     h.WAFER_ID AS "WaferID",
     h.REGIST_DATE AS "Time",
     h.PROCESS AS "Process",
+    h.EFFECTIVE_NUM AS "EffectiveNum",
     b.BIN_CODE AS "Bin",
-    b.BIN_COUNT AS "BinCount"
+    b.BIN_COUNT AS "BinCount",
+    b.BIN_NAME AS "BinName"
 FROM SONAR.SEMI_FT_HEADER h
 LEFT JOIN SONAR.SEMI_FT_BIN_SUM b
   ON h.ASSY_LOT_ID = b.ASSY_LOT_ID
@@ -154,21 +160,50 @@ class OracleRepository:
         df_long = pd.read_sql_query(query, self._conn, params=params)
         if df_long.empty:
             return df_long
-
+        df_long["BinLabel"] = pd.to_numeric(df_long["Bin"], errors="coerce").astype("Int64").astype(str).str.zfill(2)
+        if "BinName" in df_long.columns:
+            df_long["BinLabel"] = (
+                df_long["BinLabel"]
+                + "_"
+                + df_long["BinName"].fillna("").astype(str).str.strip()
+            ).str.rstrip("_")
+        pass_label = None
+        pass_rows = df_long[pd.to_numeric(df_long["Bin"], errors="coerce") == self.PASS_BIN_CODE]
+        if not pass_rows.empty:
+            pass_label = pass_rows["BinLabel"].iloc[0]
         index_cols = ["Product", "BulkID", "LotID", "WaferID", "Time"]
+        if "EffectiveNum" in df_long.columns:
+            df_long["EffectiveNum"] = pd.to_numeric(df_long["EffectiveNum"], errors="coerce")
+            index_cols.append("EffectiveNum")
         valid_index = [c for c in index_cols if c in df_long.columns]
         pivot_value = "BinCount" if "BinCount" in df_long.columns else "WaferID"
         aggfunc = "sum" if pivot_value == "BinCount" else "count"
         df = df_long.pivot_table(
             index=valid_index,
-            columns="Bin",
+            columns="BinLabel",
             values=pivot_value,
             aggfunc=aggfunc,
             fill_value=0,
-        )
-        if self.PASS_BIN_CODE in df.columns:
-            df = df.rename(columns={self.PASS_BIN_CODE: "0_PASS"})
-        df = df.rename(columns={c: f"FAIL_BIN_{c}" for c in df.columns if c != "0_PASS"}).reset_index()
+        ).reset_index()
+        rename_map: dict[str, str] = {}
+        fail_columns: list[str] = []
+        bin_columns = [c for c in df.columns if c not in valid_index]
+        for col in bin_columns:
+            if pass_label and col == pass_label:
+                rename_map[col] = "0_PASS"
+            else:
+                new_name = f"FAIL_BIN_{col}"
+                rename_map[col] = new_name
+                fail_columns.append(new_name)
+        df = df.rename(columns=rename_map)
+        pass_column = "0_PASS" if "0_PASS" in df.columns else None
+        effective_col = "EffectiveNum" if "EffectiveNum" in df.columns else None
+        if effective_col:
+            denom = df[effective_col].replace(0, pd.NA)
+            if fail_columns:
+                df[fail_columns] = df[fail_columns].div(denom, axis=0) * 100
+            if pass_column:
+                df[pass_column] = df[pass_column].div(denom, axis=0) * 100
         if "Time" in df.columns:
             df["Time"] = pd.to_datetime(df["Time"], errors="coerce")
         df["Stage"] = stage_label

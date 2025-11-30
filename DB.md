@@ -30,6 +30,7 @@
   24   DEL_FLAG            NUMBER(1,0)         可         論理削除フラグ
   25   REWORK_NEW          NUMBER(2,0)         NOT NULL   リワーク種別コード
   26   REWORK_CNT          NUMBER(2,0)         可         リワーク回数
+  27   EFFECTIVE_NUM       NUMBER              可         有効数
 
 **主キー（PK）:**\
 `SUBSTRATE_ID`, `WAFER_ID`, `PRODUCT_ID`, `PROCESS`, `REWORK_NEW`

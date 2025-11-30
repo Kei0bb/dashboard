@@ -11,6 +11,8 @@ from ..config import AppConfig
 
 
 class SQLiteRepository:
+    PASS_BIN_CODE = 1
+
     def __init__(self, config: AppConfig) -> None:
         self.config = config
         self._conn = sqlite3.connect(self.config.database.sqlite_path or "data/test.db")
@@ -20,21 +22,19 @@ class SQLiteRepository:
         if stage_upper not in {"CP", "FT"}:
             raise ValueError(f"Unsupported stage: {stage}")
 
-        df_cp = self._build_cp_frame(product_name)
-        if df_cp.empty:
-            return df_cp
+        metadata = self._build_lot_metadata(product_name)
+        df_bins = self._load_bin_distribution(product_name, stage_upper)
+        if df_bins.empty:
+            return df_bins
+        df = df_bins.merge(metadata, on=["Product", "LotID"], how="left")
+        df["Stage"] = stage_upper
+        if "Time" in df.columns:
+            df["Time"] = pd.to_datetime(df["Time"], errors="coerce")
+        return df
 
-        if stage_upper == "CP":
-            df_stage = df_cp.copy()
-        else:
-            df_stage = self._build_ft_frame(df_cp)
-
-        df_stage["Stage"] = stage_upper
-        return df_stage
-
-    def _build_cp_frame(self, product_name: str) -> pd.DataFrame:
+    def _build_lot_metadata(self, product_name: str) -> pd.DataFrame:
         query = """
-            SELECT product AS Product, lot_id AS LotID, yield AS PassRate
+            SELECT product AS Product, lot_id AS LotID
             FROM yields
             WHERE product = ?
             ORDER BY lot_id
@@ -42,7 +42,6 @@ class SQLiteRepository:
         df = pd.read_sql_query(query, self._conn, params=(product_name,))
         if df.empty:
             return df
-
         base_time = datetime.utcnow()
         df["Time"] = [base_time - timedelta(days=idx) for idx in range(len(df))]
         df["WaferID"] = df["LotID"]
@@ -50,25 +49,70 @@ class SQLiteRepository:
         df["SortNo"] = 1
         df["Tester"] = "MOCK"
         df["TP"] = "DEV"
-        df["0_PASS"] = df["PassRate"]
-        df["FAIL_BIN_1"] = (100 - df["PassRate"]).clip(lower=0)
-        return df.drop(columns=["PassRate"])
-
-    def _build_ft_frame(self, df_cp: pd.DataFrame) -> pd.DataFrame:
-        df = df_cp.copy()
-        offsets = pd.Series(range(len(df)), index=df.index, dtype=float)
-        degradation = 1.5 + (offsets % 5) * 0.4
-        df["0_PASS"] = (df["0_PASS"] - degradation).clip(lower=60.0)
-        fail_cols = [c for c in df.columns if c.startswith("FAIL_BIN_")]
-        if fail_cols:
-            remaining = (100 - df["0_PASS"]).clip(lower=0)
-            per_col = remaining / len(fail_cols)
-            for col in fail_cols:
-                df[col] = per_col
-        else:
-            df["FAIL_BIN_1"] = (100 - df["0_PASS"]).clip(lower=0)
-        df["Time"] = df["Time"] + timedelta(hours=12)
         return df
+
+    def _load_bin_distribution(self, product_name: str, stage: str) -> pd.DataFrame:
+        query = """
+            SELECT
+                product AS Product,
+                lot_id AS LotID,
+                stage AS Stage,
+                bin_code AS BinCode,
+                bin_name AS BinName,
+                bin_count AS BinCount,
+                effective_num AS EffectiveNum
+            FROM bin_data
+            WHERE product = ?
+              AND stage = ?
+            ORDER BY lot_id, bin_code
+        """
+        df = pd.read_sql_query(query, self._conn, params=(product_name, stage))
+        if df.empty:
+            return df
+        df["BinLabel"] = (
+            pd.to_numeric(df["BinCode"], errors="coerce")
+            .astype("Int64")
+            .astype(str)
+            .str.zfill(2)
+        )
+        df["BinLabel"] = (
+            df["BinLabel"] + "_" + df["BinName"].fillna("").astype(str).str.strip()
+        ).str.rstrip("_")
+        pass_rows = df[pd.to_numeric(df["BinCode"], errors="coerce") == self.PASS_BIN_CODE]
+        pass_label = pass_rows["BinLabel"].iloc[0] if not pass_rows.empty else None
+        value_cols = ["Product", "LotID", "BinLabel"]
+        pivot = (
+            df.pivot_table(
+                index=["Product", "LotID"],
+                columns="BinLabel",
+                values="BinCount",
+                aggfunc="sum",
+                fill_value=0,
+            )
+            .reset_index()
+        )
+        eff = (
+            df[["Product", "LotID", "EffectiveNum"]]
+            .drop_duplicates(["Product", "LotID"])
+            .rename(columns={"EffectiveNum": "EffectiveNum"})
+        )
+        pivot = pivot.merge(eff, on=["Product", "LotID"], how="left")
+        rename_map: dict[str, str] = {}
+        fail_cols: list[str] = []
+        bin_columns = [c for c in pivot.columns if c not in {"Product", "LotID", "EffectiveNum"}]
+        for col in bin_columns:
+            if pass_label and col == pass_label:
+                rename_map[col] = "0_PASS"
+            else:
+                new_name = f"FAIL_BIN_{col}"
+                rename_map[col] = new_name
+                fail_cols.append(new_name)
+        pivot = pivot.rename(columns=rename_map)
+        denom = pivot["EffectiveNum"].replace(0, pd.NA)
+        all_rate_cols = fail_cols + (["0_PASS"] if "0_PASS" in pivot.columns else [])
+        for col in all_rate_cols:
+            pivot[col] = pivot[col].div(denom) * 100
+        return pivot.drop(columns=["EffectiveNum"])
 
     def load_wat_measurements(self, product_name: str) -> pd.DataFrame:
         query = """
