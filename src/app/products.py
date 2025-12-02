@@ -100,11 +100,13 @@ def list_products(
 
 
 def find_product_definition(
-    product_name: str,
+    product_name: str | ProductDefinition,
     data_dir: str | Path = DEFAULT_DATA_DIR,
     config_path: str | Path | None = None,
 ) -> ProductDefinition | None:
     """name/source/data_subdir のいずれかに合致する製品設定を取得。"""
+    if isinstance(product_name, ProductDefinition):
+        return product_name
     needle = product_name.lower()
     for product in list_products(data_dir=data_dir, config_path=config_path):
         candidates = {

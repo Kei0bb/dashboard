@@ -9,23 +9,32 @@ from src.app.charts import (
 from src.app.config import load_config
 from src.app.data import create_repository
 from src.app.services import YieldService
-from src.app.ui import sidebar_product_selector, sidebar_run_button
+from src.app.ui import (
+    sidebar_backend_selector,
+    sidebar_product_selector,
+    sidebar_run_button,
+)
 
 st.set_page_config(page_title="Yield Analysis", layout="wide")
 
 
 def main() -> None:
     config = load_config()
+    config = sidebar_backend_selector(config)
     repo = create_repository(config)
     service = YieldService(repo)
+    current_backend = config.database.backend
 
     st.title("Yield Analysis")
+    st.caption(f"DB Backend: {current_backend.upper()}")
     products = service.get_products()
     selected_product = sidebar_product_selector(products)
     run_analysis = sidebar_run_button()
 
     SESSION_KEY = "yield_page_state"
     state = st.session_state.get(SESSION_KEY)
+    if state and state.get("backend") != current_backend:
+        state = None
     if state and selected_product and state.get("product") != selected_product.name:
         state = None
 
@@ -33,10 +42,13 @@ def main() -> None:
         st.warning("品種を選択してください。")
         return
 
-    default_stage = state.get("stage") if state else YieldService.STAGES[0]
+    available_stages = list(selected_product.stages) if selected_product else list(YieldService.STAGES)
+    default_stage = state.get("stage") if state else available_stages[0]
+    if default_stage not in available_stages:
+        default_stage = available_stages[0]
     selected_stage = st.segmented_control(
         "工程を選択",
-        options=list(YieldService.STAGES),
+        options=available_stages,
         default=default_stage,
         key="yield_stage_selector",
     )
@@ -59,6 +71,7 @@ def main() -> None:
             "product": selected_product.name,
             "data": stage_cache,
             "stage": selected_stage,
+            "backend": current_backend,
         }
         if run_analysis:
             st.success(f"{selected_product.label} の {selected_stage} データを読み込みました。")

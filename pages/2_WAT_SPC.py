@@ -9,24 +9,33 @@ from src.app.config import load_config
 from src.app.data import create_repository
 from src.app.services import WATService, YieldService
 from src.app.specs import extract_limits, load_specs
-from src.app.ui import sidebar_product_selector, sidebar_run_button
+from src.app.ui import (
+    sidebar_backend_selector,
+    sidebar_product_selector,
+    sidebar_run_button,
+)
 
 st.set_page_config(page_title="WAT / SPC Analysis", layout="wide")
 
 
 def main() -> None:
     config = load_config()
+    config = sidebar_backend_selector(config)
     repo = create_repository(config)
     wat_service = WATService(repo)
     yield_service = YieldService(repo)
+    current_backend = config.database.backend
 
     st.title("WAT / SPC Analysis")
+    st.caption(f"DB Backend: {current_backend.upper()}")
     products = yield_service.get_products()
     product = sidebar_product_selector(products)
     run_analysis = sidebar_run_button()
 
     SESSION_KEY = "wat_page_state"
     state = st.session_state.get(SESSION_KEY)
+    if state and state.get("backend") != current_backend:
+        state = None
     if state and product and state.get("product") != product.name:
         state = None
 
@@ -47,6 +56,7 @@ def main() -> None:
             "product": product.name,
             "data": df,
             "specs": specs,
+            "backend": current_backend,
         }
         state = st.session_state[SESSION_KEY]
         st.success(f"{product.label} のWATデータを読み込みました。")

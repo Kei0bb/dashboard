@@ -4,6 +4,8 @@ Streamlit で動作する歩留まり / WAT 監視ダッシュボードを一か
 設定は `DB_BACKEND` によって **SQLiteモック** と **Oracle本番** を即座に切り替えられます。  
 品種の定義は `config/products.yaml` で一元管理され、フォルダ構成と実DBの `PRODUCT_ID` を安全に紐づけられます。
 
+起動後はサイドバーに表示される `Database Backend` セクションから、現在の接続先（SQLite/Oracle）を明示的に選択できます。選択を変更すると同ページ内で `DB Backend: ...` が表示され、モードが曖昧になりません。
+
 ---
 
 ## 🚀 クイックスタート
