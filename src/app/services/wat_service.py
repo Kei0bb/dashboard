@@ -24,6 +24,27 @@ class WATService:
         return [c for c in df.columns if c not in id_cols]
 
     @staticmethod
+    def list_wafers(df: pd.DataFrame) -> list[str]:
+        if df.empty or "WaferID" not in df.columns:
+            return []
+        return sorted(df["WaferID"].dropna().unique())
+
+    @staticmethod
+    def filter_by_wafer(df: pd.DataFrame, wafer_id: str) -> pd.DataFrame:
+        if df.empty or "WaferID" not in df.columns:
+            return pd.DataFrame()
+        return df[df["WaferID"] == wafer_id]
+
+    @staticmethod
+    def parameter_range(df: pd.DataFrame, parameter: str) -> tuple[float | None, float | None]:
+        if df.empty or parameter not in df.columns:
+            return (None, None)
+        series = pd.to_numeric(df[parameter], errors="coerce").dropna()
+        if series.empty:
+            return (None, None)
+        return (float(series.min()), float(series.max()))
+
+    @staticmethod
     def aggregate_bulk_trend(df: pd.DataFrame, parameter: str) -> pd.DataFrame:
         if df.empty or parameter not in df.columns:
             return pd.DataFrame()

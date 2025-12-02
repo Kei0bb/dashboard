@@ -39,7 +39,15 @@ def build_bulk_trend_chart(df_trend: pd.DataFrame, parameter: str, usl: float | 
     return fig
 
 
-def build_wafer_map(df: pd.DataFrame, parameter: str) -> go.Figure:
+def build_wafer_map(
+    df: pd.DataFrame,
+    parameter: str,
+    *,
+    colorscale: str = "Viridis",
+    zmin: float | None = None,
+    zmax: float | None = None,
+    title: str | None = None,
+) -> go.Figure:
     if (
         df.empty
         or parameter not in df.columns
@@ -47,20 +55,27 @@ def build_wafer_map(df: pd.DataFrame, parameter: str) -> go.Figure:
         or "DieY" not in df.columns
     ):
         return go.Figure()
+
+    values = pd.to_numeric(df[parameter], errors="coerce")
     fig = go.Figure(
         go.Heatmap(
             x=df["DieX"],
             y=df["DieY"],
-            z=df[parameter],
-            colorscale="Viridis",
-            showscale=True,
+            z=values,
+            colorscale=colorscale,
+            zmin=zmin,
+            zmax=zmax,
+            colorbar=dict(title=parameter),
+            hovertemplate="DieX: %{x}<br>DieY: %{y}<br>Value: %{z}<extra></extra>",
         )
     )
     fig.update_layout(
-        title=f"Wafer Map: {parameter}",
+        title=title or f"Wafer Map: {parameter}",
         xaxis_title="Die X",
         yaxis_title="Die Y",
         yaxis_scaleanchor="x",
+        xaxis_constrain="range",
+        yaxis_constrain="range",
     )
     return fig
 
